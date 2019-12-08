@@ -2,106 +2,185 @@
 # img_sbs - Test 1 --------------------------------------------------------
 
 master_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
+log <- "test_visit_on_off_log.csv"
 
 test = "FLAC_1002V3_POSTURE_CHANG.CSV"
 
-df1 <- read.csv(file = master_timestamps)
+# read in timestamps csv and change to times
+corr_times <- read.csv(file = master_timestamps)
+corr_times$StopWatch_YMD_HMS <- ymd_hms(corr_times$StopWatch_YMD_HMS, 
+                                        tz="America/Chicago")
+corr_times$Corr_Picture_YMD_HMS <- ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
+                                           tz="America/Chicago")
 
-df2 <- read.table(file = paste0("./3_data/raw/annotation/", test),
-                  header = T,
-                  sep = ",")
-Filename = test
-df2$ID <- as.integer(substr(test, 6, 9))
-df2$Visit = as.integer(substr(test, 11, 11))
+# diff col
+corr_times$Difference <- NA
+corr_times$Difference <- with(corr_times,
+                       difftime(StopWatch_YMD_HMS,
+                                Corr_Picture_YMD_HMS,
+                                units = "secs"))
 
-###Change Column Type with Lubridate###
-df2$startTime <- ymd_hms(df2$startTime, tz="UTC")
-df2$endTime <- ymd_hms(df2$endTime, tz="UTC")
-attr(df2$startTime, "tzone")
-df1$StopWatch_YMD_HMS <-
-  ymd_hms(df1$StopWatch_YMD_HMS, tz="America/Chicago")
-attr(df1$StopWatch_YMD_HMS, "tzone")
-df1$Corr_Picture_YMD_HMS <-
-  ymd_hms(df1$Corr_Picture_YMD_HMS, tz="America/Chicago")
+# read in on off log and clean
+on_off_log <- read.table(file = paste0("./3_data/raw/", log),
+                         header = T,
+                         sep = ",",
+                         stringsAsFactors = F)
 
-###Create Time Difference column and Calculate###
-df1$Difference <- NA
-df1$Difference <-
-  with(df1,
-       difftime(StopWatch_YMD_HMS, Corr_Picture_YMD_HMS, units = "secs"))
+on_off_log$date_on <- paste(on_off_log$date_on_month,
+                            on_off_log$date_on_day,
+                            on_off_log$date_on_year,
+                            sep="/")
+on_off_log$time_on <- paste(on_off_log$time_on_hour,
+                            on_off_log$time_on_minute,
+                            on_off_log$time_on_seconds,
+                            sep=":")
+on_off_log$date_off <- paste(on_off_log$date_off_month,
+                             on_off_log$date_off_day,
+                             on_off_log$date_off_year,
+                             sep="/")
+on_off_log$time_off <- paste(on_off_log$time_off_hour,
+                             on_off_log$time_off_minute,
+                             on_off_log$time_off_seconds,
+                             sep=":")
+on_off_log$date_time_on <- paste(on_off_log$date_on,
+                                 on_off_log$time_on,
+                                 sep=" ")
+on_off_log$date_time_off <- paste(on_off_log$date_off,
+                                  on_off_log$time_off,
+                                  sep=" ")
+on_off_log$date_time_on <- strptime(on_off_log$date_time_on,
+                                    "%m/%d/%Y %H:%M:%S")
+on_off_log$date_time_off <- strptime(on_off_log$date_time_off,
+                                     "%m/%d/%Y %H:%M:%S")
+on_off_log$date_time_on <- force_tz(on_off_log$date_time_on,
+                                    tz = "America/Chicago")
+on_off_log$date_time_off <- force_tz(on_off_log$date_time_off,
+                                     tz = "America/Chicago")
 
-###Merge Data Frames###
-df3 <- merge(df2, df1, by = c("ID", "Visit"))
+# for loop begins
+raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", test),
+                       header = T,
+                       sep = ",")
 
-###Add Difference to Start Time Column###
-df3$NEWstarttime <- NA
-df3 <- df3 %>%
+raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+                              tz="UTC")
+raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                            tz="UTC")
+raw_anno$startTime <- with_tz(raw_anno$startTime,
+                              tz = "America/Chicago")
+raw_anno$endTime <- with_tz(raw_anno$endTime,
+                            tz = "America/Chicago")
+
+
+# for later
+file_name = test
+id <- as.integer(substr(test, 6, 9))
+visit <- as.integer(substr(test, 11, 11))
+
+# merge times and raw
+raw_anno$ID <- id
+raw_anno$Visit = visit
+mer_anno <- merge(raw_anno, corr_times, by = c("ID", "Visit"))
+
+# add diff to times
+mer_anno$NEWstarttime <- NA
+mer_anno <- mer_anno %>%
   mutate(NEWstarttime = if_else(!is.na(Difference),
                                 startTime + Difference,
                                 startTime))
-
-###Add Difference to End Time Column###
-df3$NEWendtime <- NA
-df3 <- df3 %>%
+mer_anno$NEWendtime <- NA
+mer_anno <- mer_anno %>%
   mutate(NEWendtime = if_else(!is.na(Difference),
                               endTime + Difference,
                               endTime))
 
-###Making sure New start/stop are in correct POSIxt format###
-attr(df3$NEWstarttime, "tzone")
-df3$NEWstarttime <- with_tz(df3$NEWstarttime, tz = "America/Chicago")
-df3$NEWendtime <- with_tz(df3$NEWendtime, tz = "America/Chicago")
-df3$NEWstarttime <- strptime(df3$NEWstarttime,format="%Y-%m-%d %H:%M:%OS")
-df3$NEWendtime <- strptime(df3$NEWendtime,format="%Y-%m-%d %H:%M:%OS")
+# to POSIXlt for padding later 
+mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                  format="%Y-%m-%d %H:%M:%OS")
+mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                format="%Y-%m-%d %H:%M:%OS")
 
-###Forcing correct timezone on stopwatch to then compare to NEWStartTime###
-df3$StopWatch_YMD_HMS <- 
-  force_tz(df3$StopWatch_YMD_HMS, tz = "America/Chicago")
-attr(df3$StopWatch_YMD_HMS, "tzone")
-df3$StopWatch_YMD_HMS <- with_tz(df3$StopWatch_YMD_HMS, tz = "GMT")
-df3$StopWatch_YMD_HMS <- with_tz(df3$StopWatch_YMD_HMS, tz = "America/Chicago")
+# write a "check" csv file to see if stopwatch matches NEW start time
+write.table(mer_anno,
+            file = paste0("./3_data/processed/img_check/", file_name),
+            sep = ",",
+            row.names = F)
 
-###total wear time###
-df3$weartime <- NA
-df3$weartime <- abs(difftime(df3$NEWstarttime[1], df3$NEWendtime[nrow(df3)], units = "secs"))
-
-###write a "check" csv file to see if stopwatch matches NEW start time###
-write.csv(df3, file = paste0("./data/image_check/", Filename))
-
-###second by second###
-n <- nrow(df3)
+# sbs
+n <- nrow(mer_anno)
 l <- lapply(1:n, function(i) {
-  new <- seq.POSIXt(df3$NEWstarttime[i], df3$NEWendtime[i], by = "sec")
-  annotation <- rep(df3$annotation[i], length(new))
+  new <- seq.POSIXt(mer_anno$NEWstarttime[i], mer_anno$NEWendtime[i], by = "sec")
+  annotation <- rep(mer_anno$annotation[i], length(new))
   data.frame(time = new, annotation = annotation)
 })
 
-df4 <- Reduce(rbind, l)
+sbs_anno <- Reduce(rbind, l) %>% 
+  pad()
 
-df5 <- df4 %>% pad
-
-###changing NA's to transition;gap###
-levels <- levels(df5$annotation)
+# changing NA's to transition;gap
+levels <- levels(sbs_anno$annotation)
 levels[length(levels) + 1] <- "transition;gap"
-df5$annotation <- factor(df5$annotation, levels = levels)
-df5$annotation[is.na(df5$annotation)] <- "transition;gap"
+sbs_anno$annotation <- factor(sbs_anno$annotation,
+                              levels = levels)
+sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
 
-###add in ID and Visit###
-df5$ID <- as.integer(substr(filelist[CSV], 6, 9))
-df5$Visit = as.integer(substr(filelist[CSV], 11, 11))
-
-###reorder columns###
-df6 <-
-  df5[,c(
-    "ID",
-    "Visit",
-    "time",
-    "annotation"
-  )]
+# clean
+sbs_anno$ID <- id
+sbs_anno$Visit <- visit
+sbs_anno <-sbs_anno[, c("ID",
+                        "Visit",
+                        "time",
+                        "annotation")]
 
 ###Save the new Dataframe###
-write.csv(df6, file = paste0("./data/image/", Filename))
+write.table(sbs_anno,
+            file = paste0("./3_data/processed/img_sbs/", file_name),
+            sep = ",",
+            row.names = F,
+            na = "transition;gap")
 
+# on off times
+on_off <- on_off_log[on_off_log$ID == id, ]
+on_off <- on_off[on_off$Visit == visit, ]
+
+
+#	if on/off times recorded - loop through and label time monitor is not worn
+if(dim(on_off)[1]>0) {
+  
+  sbs_anno$off <- 1
+    
+    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+    class(on)
+    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+    n <- dim(sbs_anno)[1]
+    class(sbs_anno$time)
+    inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+    
+    if (length(inds)>0) {
+      
+      sbs_anno$off[inds] <- 0
+      
+    }
+  
+  if(dim(on_off)[1]==0) {
+    
+    sbs_anno$off <- "No.On.Off.Log"	
+    
+  }
+}
+
+#Clean#
+class(sbs_anno$time)
+attr(sbs_anno$time, "tzone")
+sbs_anno$time <- as.POSIXct(sbs_anno$time,
+                            tz = "America/Chicago")
+vis_anno <- sbs_anno[sbs_anno$off == 0, ]
+vis_anno <- vis_anno[ , !(names(vis_anno) %in% "off")]
+vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
 
 ###testing on off function###
 test = "FLAC_1009V1_POSTURE_CHANG.CSV"
@@ -460,3 +539,7 @@ kappa.table.1sec$pvalue_1sec <- append(kappa.table.1sec$pvalue_1sec, p.val)
 counter <- counter+1
 
 
+
+
+# maybe for later??
+on_off_log$hours_on <- as.vector(difftime(strptime(on_off_log$date_time_off,format="%Y-%m-%d %H:%M:%S"),strptime(on_off_log$date_time_on,format="%Y-%m-%d %H:%M:%S"), units="hours"))

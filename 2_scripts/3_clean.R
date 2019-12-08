@@ -7,7 +7,10 @@ source("./2_scripts/2_functions")
 
 anno.list <- toupper(list.files("./raw/annotation", ".csv"))
 
-image.sec.by.sec(anno.list)
+master_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
+
+img_sbs(anno_file_list = anno.list,
+        timestamps_path = master_timestamps)
 
 warnings()
 

@@ -1,14 +1,13 @@
-img_sbs <- function(annotation.file.list, timestamps.path){
+img_sbs <- function(anno_file_list, timestamps_path){
   
-  require(lubridate)
-  require(dplyr)
-  require(padr)
+  # read in timestamps csv
+  timestamps <- timestamps_path
+  
+  for (i in 1:length(anno_file_list)){
     
-  for (i in 1:length(annotation.file.list)){
     print(annotation.file.list[i])
     
-    df1 <-
-      read.csv(file = timestamps.path)
+    df1 <- read.csv(file = timestamps)
     
     df2 = read.table(paste0("./raw/annotation", "/",
                             annotation.file.list[i]),
