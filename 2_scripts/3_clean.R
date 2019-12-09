@@ -1,13 +1,17 @@
-source("./2_scripts/2_functions")
+source("./2_scripts/2_functions.R")
 
 
 # image Cleaning ----------------------------------------------------------
 
 # Second by Second Function
 
-anno.list <- toupper(list.files("./raw/annotation", ".csv"))
+anno_list <- toupper(list.files("./3_data/raw/annotation", ".csv"))
+corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
+log <- "visit_on_off_log.csv"
 
-image.sec.by.sec(anno.list)
+process_anno(anno_file_list = anno_list,
+             corr_timstamps_path = corr_timestamps,
+             on_off_log = log)
 
 warnings()
 
