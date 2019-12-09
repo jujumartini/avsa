@@ -16,40 +16,40 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
   
   # read in on off log and clean
   log <- read.table(file = paste0("./3_data/raw/", on_off_log),
-                           header = T,
-                           sep = ",",
-                           stringsAsFactors = F)
+                    header = T,
+                    sep = ",",
+                    stringsAsFactors = F)
   
   log$date_on <- paste(log$date_on_month,
-                              log$date_on_day,
-                              log$date_on_year,
-                              sep="/")
+                       log$date_on_day,
+                       log$date_on_year,
+                       sep="/")
   log$time_on <- paste(log$time_on_hour,
-                              log$time_on_minute,
-                              log$time_on_seconds,
-                              sep=":")
+                       log$time_on_minute,
+                       log$time_on_seconds,
+                       sep=":")
   log$date_off <- paste(log$date_off_month,
-                               log$date_off_day,
-                               log$date_off_year,
-                               sep="/")
+                        log$date_off_day,
+                        log$date_off_year,
+                        sep="/")
   log$time_off <- paste(log$time_off_hour,
-                               log$time_off_minute,
-                               log$time_off_seconds,
-                               sep=":")
+                        log$time_off_minute,
+                        log$time_off_seconds,
+                        sep=":")
   log$date_time_on <- paste(log$date_on,
-                                   log$time_on,
-                                   sep=" ")
+                            log$time_on,
+                            sep=" ")
   log$date_time_off <- paste(log$date_off,
-                                    log$time_off,
-                                    sep=" ")
+                             log$time_off,
+                             sep=" ")
   log$date_time_on <- strptime(log$date_time_on,
-                                      "%m/%d/%Y %H:%M:%S")
+                               "%m/%d/%Y %H:%M:%S")
   log$date_time_off <- strptime(log$date_time_off,
-                                       "%m/%d/%Y %H:%M:%S")
+                                "%m/%d/%Y %H:%M:%S")
   log$date_time_on <- force_tz(log$date_time_on,
-                                      tz = "America/Chicago")
+                               tz = "America/Chicago")
   log$date_time_off <- force_tz(log$date_time_off,
-                                       tz = "America/Chicago")
+                                tz = "America/Chicago")
   
   # sbs function for code times
   sbs <- function(i) {
@@ -91,6 +91,13 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
     raw_anno$ID <- id
     raw_anno$Visit = visit
     mer_anno <- merge(raw_anno, corr_times, by = c("ID", "Visit"))
+
+    # to get relevant error message rather than generic one
+    if (dim(mer_anno)[1] == 0) {
+      
+      stop("Error: Annotation does not have an entry in Timestamps.csv")
+      
+    }
     
     # add diff to times
     mer_anno$NEWstarttime <- NA
@@ -140,29 +147,23 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
     # on off times
     on_off <- log[log$ID == id, ]
     on_off <- on_off[on_off$Visit == visit, ]
+    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+    class(on)
+    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
     
+    #	label off times
+    sbs_anno$off <- 1
+    n <- dim(sbs_anno)[1]
+    class(sbs_anno$time)
+    inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
     
-    #	if on/off times recorded - loop through and label time monitor is not worn
-    if(dim(on_off)[1]>0) {
+    if (length(inds)>0) {
       
-      sbs_anno$off <- 1
+      sbs_anno$off[inds] <- 0
       
-      on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
-      class(on)
-      off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
-      n <- dim(sbs_anno)[1]
-      class(sbs_anno$time)
-      inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+    } else {
       
-      if (length(inds)>0) {
-        
-        sbs_anno$off[inds] <- 0
-        
-      }
-      
-    } else if(dim(on_off)[1]==0) {
-      
-      sbs_anno$off <- "No.On.Off.Log"	
+      message("Stopwatch Timestamp or on-off entry is incorrect")
       
     }
     
