@@ -1,184 +1,189 @@
-img_sbs <- function(annotation.file.list, timestamps.path){
+process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
   
-  require(lubridate)
-  require(dplyr)
-  require(padr)
+  # read in timestamps csv and change to times
+  corr_times <- read.csv(file = corr_timstamps_path)
+  corr_times$StopWatch_YMD_HMS <- ymd_hms(corr_times$StopWatch_YMD_HMS, 
+                                          tz="America/Chicago")
+  corr_times$Corr_Picture_YMD_HMS <- ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
+                                             tz="America/Chicago")
+  
+  # diff col
+  corr_times$Difference <- NA
+  corr_times$Difference <- with(corr_times,
+                                difftime(StopWatch_YMD_HMS,
+                                         Corr_Picture_YMD_HMS,
+                                         units = "secs"))
+  
+  # read in on off log and clean
+  log <- read.table(file = paste0("./3_data/raw/", on_off_log),
+                    header = T,
+                    sep = ",",
+                    stringsAsFactors = F)
+  
+  log$date_on <- paste(log$date_on_month,
+                       log$date_on_day,
+                       log$date_on_year,
+                       sep="/")
+  log$time_on <- paste(log$time_on_hour,
+                       log$time_on_minute,
+                       log$time_on_seconds,
+                       sep=":")
+  log$date_off <- paste(log$date_off_month,
+                        log$date_off_day,
+                        log$date_off_year,
+                        sep="/")
+  log$time_off <- paste(log$time_off_hour,
+                        log$time_off_minute,
+                        log$time_off_seconds,
+                        sep=":")
+  log$date_time_on <- paste(log$date_on,
+                            log$time_on,
+                            sep=" ")
+  log$date_time_off <- paste(log$date_off,
+                             log$time_off,
+                             sep=" ")
+  log$date_time_on <- strptime(log$date_time_on,
+                               "%m/%d/%Y %H:%M:%S")
+  log$date_time_off <- strptime(log$date_time_off,
+                                "%m/%d/%Y %H:%M:%S")
+  log$date_time_on <- force_tz(log$date_time_on,
+                               tz = "America/Chicago")
+  log$date_time_off <- force_tz(log$date_time_off,
+                                tz = "America/Chicago")
+  
+  # sbs function for code times
+  sbs <- function(i) {
     
-  for (i in 1:length(annotation.file.list)){
-    print(annotation.file.list[i])
+    new <- seq.POSIXt(mer_anno$NEWstarttime[i],
+                      mer_anno$NEWendtime[i], by = "sec")
+    annotation <- rep(mer_anno$annotation[i],
+                      length(new))
+    data.frame(time = new,
+               annotation = annotation)
     
-    df1 <-
-      read.csv(file = timestamps.path)
+  }
+  
+  # create processed anno files
+  for (i in seq_along(anno_file_list)) {
     
-    df2 = read.table(paste0("./raw/annotation", "/",
-                            annotation.file.list[i]),
-                     header = T,
-                     sep = ",")
-    Filename = annotation.file.list[i]
-    df2$ID <- as.integer(substr(annotation.file.list[i], 6, 9))
-    df2$Visit = as.integer(substr(annotation.file.list[i], 11, 11))
+    print(anno_file_list[i])
     
-    ###Change Column Type with Lubridate###
-    df2$startTime <- ymd_hms(df2$startTime, tz="UTC")
-    df2$endTime <- ymd_hms(df2$endTime, tz="UTC")
+    raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", anno_file_list[i]),
+                           header = T,
+                           sep = ",")
     
-    df1$StopWatch_YMD_HMS <-
-      ymd_hms(df1$StopWatch_YMD_HMS, tz="America/Chicago")
+    raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+                                  tz="UTC")
+    raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                                tz="UTC")
+    raw_anno$startTime <- with_tz(raw_anno$startTime,
+                                  tz = "America/Chicago")
+    raw_anno$endTime <- with_tz(raw_anno$endTime,
+                                tz = "America/Chicago")
     
-    df1$Corr_Picture_YMD_HMS <-
-      ymd_hms(df1$Corr_Picture_YMD_HMS, tz="America/Chicago")
     
-    ###Create Time Difference column and Calculate###
-    df1$Difference <- NA
-    df1$Difference <-
-      with(df1,
-           difftime(StopWatch_YMD_HMS, Corr_Picture_YMD_HMS, units = "secs"))
+    # for later
+    file_name = anno_file_list[i]
+    id <- as.integer(substr(anno_file_list[i], 6, 9))
+    visit <- as.integer(substr(anno_file_list[i], 11, 11))
     
-    ###Merge Data Frames###
-    df3 <- merge(df2, df1, by = c("ID", "Visit"))
+    # merge times and raw
+    raw_anno$ID <- id
+    raw_anno$Visit = visit
+    mer_anno <- merge(raw_anno, corr_times, by = c("ID", "Visit"))
+
+    # to get relevant error message rather than generic one
+    if (dim(mer_anno)[1] == 0) {
+      
+      stop("Error: Annotation does not have an entry in Timestamps.csv")
+      
+    }
     
-    ###Add Difference to Start Time Column###
-    df3$NEWstarttime <- NA
-    df3 <- df3 %>%
+    # add diff to times
+    mer_anno$NEWstarttime <- NA
+    mer_anno <- mer_anno %>%
       mutate(NEWstarttime = if_else(!is.na(Difference),
                                     startTime + Difference,
                                     startTime))
-    
-    ###Add Difference to End Time Column###
-    df3$NEWendtime <- NA
-    df3 <- df3 %>%
+    mer_anno$NEWendtime <- NA
+    mer_anno <- mer_anno %>%
       mutate(NEWendtime = if_else(!is.na(Difference),
                                   endTime + Difference,
                                   endTime))
     
-    ### Changing NEW times to Chicago... to not double convert activpal -.-###
-    df3$NEWstarttime <- with_tz(df3$NEWstarttime, tz = "America/Chicago")
-    df3$NEWendtime <- with_tz(df3$NEWendtime, tz = "America/Chicago")
-    df3$NEWstarttime <- strptime(df3$NEWstarttime,format="%Y-%m-%d %H:%M:%OS")
-    df3$NEWendtime <- strptime(df3$NEWendtime,format="%Y-%m-%d %H:%M:%OS")
+    # to POSIXlt for padding later 
+    mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                      format="%Y-%m-%d %H:%M:%OS")
+    mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                    format="%Y-%m-%d %H:%M:%OS")
     
-    ###write a "check" csv file to see if stopwatch matches NEW start time###
-    write.csv(df3, file = paste0("./data/image_check/", Filename))
+    # write a "check" csv file to see if stopwatch matches NEW start time
+    write.table(mer_anno,
+                file = paste0("./3_data/processed/anno_check/", file_name),
+                sep = ",",
+                row.names = F)
     
-    ###second by second###
-    n <- nrow(df3)
-    l <- lapply(1:n, function(i) {
-      new <- seq.POSIXt(df3$NEWstarttime[i], df3$NEWendtime[i], by = "sec")
-      annotation <- rep(df3$annotation[i], length(new))
-      data.frame(time = new, annotation = annotation)
-    })
+    # sbs
+    n <- nrow(mer_anno)
+    l <- lapply(1:n, sbs)
+    sbs_anno <- Reduce(rbind, l) %>% 
+      pad()
     
-    df4 <- Reduce(rbind, l)
-    
-    df5 <- df4 %>% pad
-    
-    ###changing NA's to transition;gap###
-    levels <- levels(df5$annotation)
+    # changing NA's to transition;gap
+    levels <- levels(sbs_anno$annotation)
     levels[length(levels) + 1] <- "transition;gap"
-    df5$annotation <- factor(df5$annotation, levels = levels)
-    df5$annotation[is.na(df5$annotation)] <- "transition;gap"
+    sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                  levels = levels)
+    sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
     
-    ###add in ID and Visit###
-    df5$ID <- as.integer(substr(annotation.file.list[i], 6, 9))
-    df5$Visit = as.integer(substr(annotation.file.list[i], 11, 11))
+    # clean
+    sbs_anno$ID <- id
+    sbs_anno$Visit <- visit
+    sbs_anno <-sbs_anno[, c("ID",
+                            "Visit",
+                            "time",
+                            "annotation")]
     
-    ###reorder columns###
-    df6 <-
-      df5[,c(
-        "ID",
-        "Visit",
-        "time",
-        "annotation")]
+    # on off times
+    on_off <- log[log$ID == id, ]
+    on_off <- on_off[on_off$Visit == visit, ]
+    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+    class(on)
+    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
     
-    ###Save the new Dataframe###
-    write.csv(df6, file = paste0("./Data/analysis/", Filename))
+    #	label off times
+    sbs_anno$off <- 1
+    n <- dim(sbs_anno)[1]
+    class(sbs_anno$time)
+    inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
     
+    if (length(inds)>0) {
+      
+      sbs_anno$off[inds] <- 0
+      
+    } else {
+      
+      message("Stopwatch Timestamp or on-off entry is incorrect")
+      
+    }
+    
+    # take away off times + clean
+    vis_anno <- sbs_anno[sbs_anno$off == 0, ]
+    vis_anno <- vis_anno[ , !(names(vis_anno) %in% "off")]
+    vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+    vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+    vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+    vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+    vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
+    
+    # write table
+    write.table(vis_anno,
+                file = paste0("./3_data/processed/anno_clean/", file_name),
+                sep = ",",
+                row.names = F)
   }
-  
 }
 
-img_onoff <- function(sec.by.sec.anno.list) {
-  
-  for (i in 1:length(sec.by.sec.anno.list)) {
-    
-    print(sec.by.sec.anno.list[i])
-    
-    on.off.log <- read.csv("./data/Visit_on_off_log.csv")
-    on.off.log$id <- as.character(on.off.log$id)
-    ID = as.integer(substr(sec.by.sec.anno.list[i], 6, 9))
-    Visit = as.character(substr(sec.by.sec.anno.list[i], 10, 11))
-    on.off.log <- filter(on.off.log, id == ID)
-    on.off.log <- filter(on.off.log, visit == Visit)
-    
-    on.off.log$date.on <- paste(on.off.log$date.on.month,on.off.log$date.on.day,on.off.log$date.on.year,sep="/")
-    on.off.log$time.on <- paste(on.off.log$time.on.hour,on.off.log$time.on.minute,on.off.log$time.on.seconds,sep=":")
-    
-    on.off.log$date.off <- paste(on.off.log$date.off.month,on.off.log$date.off.day,on.off.log$date.off.year,sep="/")
-    on.off.log$time.off <- paste(on.off.log$time.off.hour,on.off.log$time.off.minute,on.off.log$time.off.seconds,sep=":")
-    
-    on.off.log$date.time.on <- paste(on.off.log$date.on, on.off.log$time.on, sep=" ")
-    on.off.log$date.time.off <- paste(on.off.log$date.off, on.off.log$time.off, sep=" ")
-    
-    on.off.log$date.time.on <- strptime(on.off.log$date.time.on,"%m/%d/%Y %H:%M:%S")
-    on.off.log$date.time.off <- strptime(on.off.log$date.time.off,"%m/%d/%Y %H:%M:%S")
-    
-    on.off.log$date.time.on <- 
-      force_tz(on.off.log$date.time.on, tz = "America/Chicago")
-    
-    on.off.log$date.time.off <- 
-      force_tz(on.off.log$date.time.off, tz = "America/Chicago")
-    
-    on.off.log$hours.on <- as.vector(difftime(strptime(on.off.log$date.time.off,format="%Y-%m-%d %H:%M:%S"),strptime(on.off.log$date.time.on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
-    
-    df = read.csv(paste0("./data/image", "/",
-                         sec.by.sec.anno.list[i]),
-                  header = T,
-                  sep = ",",
-                  stringsAsFactors = T)
-    df$time <- strptime(df$time,"%Y-%m-%d %H:%M:%S")
-    
-    #	if on/off times recorded - loop through and label time monitor is not worn
-    if(dim(on.off.log)[1]>0) {
-      
-      df$off <- 1	
-      
-      for (t in (1:dim(on.off.log)[1])) {
-        
-        on <- strptime(on.off.log$date.time.on[t],"%Y-%m-%d %H:%M:%S")
-        class(on)
-        off <- strptime(on.off.log$date.time.off[t],"%Y-%m-%d %H:%M:%S")
-        n <- dim(df)[1]
-        class(df$time)
-        inds <- (1:n)[((df$time>=on)&(df$time<=off))]
-        
-        if (length(inds)>0) {
-          
-          df$off[inds] <- 0
-          
-        }
-      }
-      
-      if(dim(on.off.log)[1]==0) {
-        
-        df$off <- "No.On.Off.Log"	
-      }
-    }	#end on/off loop
-    
-    #Clean#
-    df$time <- as.POSIXct(df$time, tz = "America/Chicago")
-    df <- filter(df, off == 0)
-    df <- df[ , 2:5]
-    df$annotation <- 
-      as.character(df$annotation) #change to character for next step
-    df$annotation[df$annotation == "posture;0006 sitting"] <- "0" 
-    df$annotation[df$annotation == "posture;0007 standing"] <- "1" 
-    df$annotation[df$annotation == "posture;0008 movement"] <- "2"
-    df$annotation[df$annotation!="0" & df$annotation!="1" & df$annotation!="2"] <- "3"
-    Filename2 = sec.by.sec.anno.list[i]
-    write.csv(df, file = paste0("./data/image/", Filename2))
-    
-  }
-}
 process_ap <- function(ap.list, directory) {
   
   directory = directory
