@@ -148,7 +148,6 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
     on_off <- log[log$ID == id, ]
     on_off <- on_off[on_off$Visit == visit, ]
     on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
-    class(on)
     off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
     
     #	label off times
