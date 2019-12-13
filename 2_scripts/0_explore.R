@@ -630,7 +630,6 @@ if(is.character(raw_ap$time) == T & t == n) {
                                     origin = "1899-12-30"))
   raw_ap$time <- as.POSIXlt(raw_ap$time,
                             tz = "UTC")
-  attr(raw_ap$time, "tzone")
   
   # for some reason, converting to UTC actually makes it relevant time zone
   raw_ap$time <- force_tz(raw_ap$time,
@@ -638,7 +637,6 @@ if(is.character(raw_ap$time) == T & t == n) {
   raw_ap$time <- strptime(raw_ap$time,
                           format = "%Y-%m-%d %H:%M:%S")
 
-  
 }
 
 # correction factor for ap files after 11/01/2018
@@ -649,8 +647,6 @@ if (date(raw_ap$time)[1] > as.Date("2018-11-01")) {
 }
 
 # second by second
-raw_ap$interval <- as.numeric(raw_ap$interval)
-raw_ap$methrs <- as.numeric(raw_ap$methrs)
 n <- dim(raw_ap)[1]
 
 # maybe use this code for noldus!!
@@ -671,22 +667,27 @@ events <- rep((1:te),
 acts <- rep(raw_ap$activity,
             time_each_event)
 l <- length(acts)
-start_time <- strptime(raw_ap$time[1],
+ap_start <- strptime(raw_ap$time[1],
                        format="%Y-%m-%d %H:%M:%S")
-times <- start_time + (0:(l - 1))
+times <- ap_start + (0:(l - 1))
 
 # The met hours per second in the interval.
+raw_ap$interval <- as.numeric(raw_ap$interval)
+raw_ap$methrs <- as.numeric(raw_ap$methrs)
+
 met_hrs <- raw_ap$methrs / raw_ap$interval 	
 met_hrs <- rep(met_hrs,
                time_each_event)
+
 # To compute mets per second in the interval, multiply methours by 3600 sec/hour and divide by number of seconds.
 mets <- raw_ap$methrs * 3600 / raw_ap$interval
 mets <- rep(mets,
             time_each_event)
 steps <- rep(raw_ap$cumulativesteps,
              time_each_event)
+
 # Make 15-sec epoch variable and METs
-fifteen_sec_times <- start_time + (15 * rep(0:(floor(l / 15)),
+fifteen_sec_times <- ap_start + (15 * rep(0:(floor(l / 15)),
                                             each = 15,
                                             length = l))
 fifteen_sec_mets <- tapply(mets,
@@ -697,7 +698,7 @@ fifteen_sec_mets <- rep(fifteen_sec_mets,
                         length = l)
 
 # Make 1-min epoch variable and METs
-one_min_times <- start_time + (60 * rep(0:(floor(l / 60)),
+one_min_times <- ap_start + (60 * rep(0:(floor(l / 60)),
                                         each = 60,
                                         length = l))
 one_min_mets <- tapply(mets,
@@ -731,7 +732,6 @@ sbs_ap <- merge(sbs_ap,
                            num_events = events,
                            stringsAsFactors = F),
                 all = T)
-
 sbs_ap$mets <- signif(sbs_ap$mets,
                       digits = 3)
 
@@ -769,28 +769,25 @@ if (dim(on_off)[1] == 0) {
   }
 }
 
-sbs_ap$time <- strptime(sbs_ap$time,"%Y-%m-%d %H:%M:%S")
-
-### Clean ###
-sbs_ap$time <- 
-  as.POSIXct(sbs_ap$time, 
+# Clean - avsa specific
+vis_ap$time <- 
+  as.POSIXct(vis_ap$time, 
              tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
-sbs_ap <- 
-  sbs_ap[!(sbs_ap$off==1), ] #remove non-visit time#
-sbs_ap$ID <- 
-  as.integer(substr(testap, 6, 9)) #add in ID
-sbs_ap$Visit <-
-  as.integer(substr(testap, 12, 12)) #add in visit
-sbs_ap <- 
-  sbs_ap[ , c(11,12,1,3)] #only need ap.posture column
-sbs_ap$ap.posture <- 
-  as.character(sbs_ap$ap.posture) #change to character for next step
-sbs_ap$ap.posture[sbs_ap$ap.posture == "0"] <- "posture;0006 sitting" 
-sbs_ap$ap.posture[sbs_ap$ap.posture == "1"] <- "posture;0007 standing" 
-sbs_ap$ap.posture[sbs_ap$ap.posture == "2"] <- "posture;0008 movement"
-Filename3 = aplist2[event.file]
-write.csv(sbs_ap, file = paste0("./data/ap/", Filename3))
+vis_ap <- 
+  sbs_ap[!(sbs_ap$off == 1), ] #remove non-visit time#
+vis_ap$ID <- as.numeric(id) #add in ID
+vis_ap$Visit <- as.numeric(visit) #add in visit
+vis_ap <- 
+  vis_ap[ , c("ID",
+              "Visit",
+              "time",
+              "ap_posture")]
 
+# write data frame
+write.table(vis_ap,
+            file = paste0("./3_data/processed/ap_clean/", id, "V", visit, ".csv"),
+            sep = ",",
+            row.names = F)
 
 
 # other -------------------------------------------------------------------
@@ -803,6 +800,12 @@ if(i == 0) {
   sbs_ap$off <- "AP and on.off.log do not match"
   
 }
+
+sbs_ap$ap.posture <- 
+  as.character(sbs_ap$ap.posture) #change to character for next step
+sbs_ap$ap.posture[sbs_ap$ap.posture == "0"] <- "posture;0006 sitting" 
+sbs_ap$ap.posture[sbs_ap$ap.posture == "1"] <- "posture;0007 standing" 
+sbs_ap$ap.posture[sbs_ap$ap.posture == "2"] <- "posture;0008 movement"
 
 #### testing merge function
 test = "FLAC_1042V2_POSTURE_CHANG.CSV"
