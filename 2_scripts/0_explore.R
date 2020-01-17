@@ -1034,28 +1034,43 @@ if (dim(on_off)[1] == 0) {
   }
 }
 
-# testing daylight conversion 1 -----------------------------------------------------
-# good
+# testing daylight conversion -----------------------------------------------------
 on_off_log <- "visit_on_off_log.csv"
 
-# test1 - no correction
-nsavings_test <- "2018V1-AP740063 28Feb18 8-28am for 3h 26m-AOSD-CL08090134-Events.csv" #no-no
-ysavings_test <- "5025V1-AP740072 27Mar18 8-25am for 8d 1h 46m-AOSD-CL08090134-Events.csv" #yes-yes
+# test1
+nsavings_test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv" #yes-no
+ysavings_test <- "1074V1-AP740064 9Nov10 12-00pm for 3h 29m-AOSD-CL08090134-Events.csv" #no-yes
 
 # test2
-nsavings_test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv" #no-yes
-ysavings_test <- "1074V1-AP740064 9Nov10 12-00pm for 3h 29m-AOSD-CL08090134-Events.csv" #yes-no
-
-# test3
-nsavings_test <- "1052V1-AP740072 10Aug10 2-59pm for 5h 13m-AOSD-CL08090134-Events.csv" #no-yes
+nsavings_test <- "1052V1-AP740072 10Aug10 2-59pm for 5h 13m-AOSD-CL08090134-Events.csv" #yes-no
 ysavings_test <- "1052V3-AP740067 17Sep10 4-44pm for 4h 49m-AOSD-CL08090134-Events.csv" #yes-yes
 
-# test
+# test3
 nsavings_test <- "1085V1-AP740074 4Dec10 3-39pm for 3h 54m-AOSD-CL08090134-Events.csv" #no-yes
 ysavings_test <- "1115V2-AP740083 2Apr11 6-18pm for 3h 22m-AOSD-CL08090134-Events.csv" #yes-yes
 
+# test4
+nsavings_test <- "1100V2-AP740067 3Feb11 10-32am for 3h 39m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "4121V1-AP740081 21May11 11-36am for 4h 26m-AOSD-CL08090134-Events.csv" #y-n
+
+# test5
+nsavings_test <- "7101V1-AP740081 11Feb11 2-28pm for 5h 47m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "5114V1-AP740074 29Mar11 10-34am for 4h 44m-AOSD-CL08090134-Events.csv" #y-y
+
+# test6
+nsavings_test <- "1042V2-AP740063 4Jun10 10-21am for 6h 23m-AOSD-CL08090134-Events.csv"  #y-n
+ysavings_test <- "1068V2-AP740072 23Oct10 12-28pm for 4h 40m-AOSD-CL08090134-Events.csv" #y-y
+
+# test7
+nsavings_test <- "1087V3-AP740072 12Jan11 3-45pm for 3h 58m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "1042V3-AP740068 23Jul10 11-28am for 5h 41m-AOSD-CL08090134-Events.csv" #y-n
+
+# test8
+nsavings_test <- "1118V3-AP740065 26Apr11 10-45am for 3h 56m-AOSD-CL08090134-Events.csv" #y-y
+ysavings_test <- "3065V3-AP740072 6Oct10 10-52am for 4h 4m-AOSD-CL08090134-Events.csv"   #y-y
 
 # read in on off log and clean
+{
 log <- read.table(file = paste0("./3_data/raw/", on_off_log),
                   header = T,
                   sep = ",",
@@ -1091,8 +1106,10 @@ log$date_time_on <- force_tz(log$date_time_on,
                              tz = "America/Chicago")
 log$date_time_off <- force_tz(log$date_time_off,
                               tz = "America/Chicago")
+}
 
 ########## no savings
+{
 nsav_ap <- read.table(file = paste0("./3_data/raw/events/", nsavings_test),
                      header = T,
                      sep = ",",
@@ -1131,8 +1148,10 @@ nsav_ap$time <- force_tz(nsav_ap$time,
 nsav_ap$time <- strptime(nsav_ap$time,
                          format = "%Y-%m-%d %H:%M:%S")
 nsav_ap$time <- nsav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
+}
 
 ######### yes savings
+{
 ysav_ap <- read.table(file = paste0("./3_data/raw/events/", ysavings_test),
                       header = T,
                       sep = ",",
@@ -1171,7 +1190,7 @@ ysav_ap$time <- force_tz(ysav_ap$time,
 ysav_ap$time <- strptime(ysav_ap$time,
                          format = "%Y-%m-%d %H:%M:%S")
 ysav_ap$time <- ysav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
-
+}
 
 # other -------------------------------------------------------------------
 
