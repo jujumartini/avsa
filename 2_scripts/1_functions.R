@@ -57,7 +57,8 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
     # check#1: See if timestamp was entered
     if (dim(mer_anno)[1] == 0) {
       
-      message("Error: Annotation does not have an entry in Timestamps.csv")
+      warning(paste(substr(anno_file_list[i], 6, 11), "annotation file does not have an entry in Timestamps.csv",
+                    sep = " "))
       
     } else {
     
@@ -115,7 +116,8 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
       i <- length(inds_worn)
       if(i == 0) {
         
-        message("Error: Stopwatch Timestamp or on-off entry is incorrect")
+        warning(paste(substr(anno_file_list[i], 6, 11), "timestamp or on_off_log entry incorrect",
+                      sep = " "))
         
       } else {
         
@@ -203,7 +205,8 @@ process_ap <- function(ap_file_list) {
     
     if (dim(on_off)[1] == 0) {
       
-      message("Error: Subject/Visit not in on_off_log")
+      warning(paste(substr(ap_file_list[i], 1, 6), "not in on_off_log",
+                    sep = " "))
       
     } else {
       
@@ -336,7 +339,8 @@ process_ap <- function(ap_file_list) {
       i <- length(inds_worn)
       if(i == 0) {
         
-        message("Error: AP and on_off do not match")
+        warning(paste(substr(ap_file_list[i], 1, 6), "ap file and on_off entry do not match",
+                      sep = " "))
         
       } else {
         
@@ -361,39 +365,39 @@ process_ap <- function(ap_file_list) {
   }
 }
 
-merging.files <- function(file) {
+merge_anno_ap <- function(list_anno) {
 
-  print(filelist3[file])
-  
-  image.frame <- read.csv(paste0("./data/image/", 
-                                 filelist3[file]),
-                          header = T,
-                          sep = ",",
-                          stringsAsFactors = F)
-  image.frame <- image.frame[ ,-1]
-  ID = as.character(substr(filelist3[file], 6, 9))
-  Visit = as.character(substr(filelist3[file], 10, 11))
-  
-  ap.frame <- read.csv(paste0("./data/ap/", 
-                              "FLAC_",
-                              ID,
-                              "_",
-                              Visit,
-                              ".csv"),
-                       header = T,
-                       sep = ",",
-                       stringsAsFactors = F)
-  ap.frame <- ap.frame[ ,-1]
-  
-  merged.frame <- full_join(image.frame, ap.frame)
-  merged.frame <- merged.frame[ ,-c(2)]
-  merged.frame <- merged.frame[complete.cases(merged.frame), ]
-  merged.frame$ID <- paste(c(as.character(substr(filelist3[file], 6, 9)),
-                             as.character(substr(filelist3[file], 10, 11)))
-                           , collapse = "")
-  Filename4 = paste0("FLAC_", ID, "_", Visit)
-  write.csv(merged.frame, file = paste0("./data/merged/", Filename4, "_1sec", ".csv"))
-  
+  for (i in seq_along(list_anno)) {
+    
+    print(list_anno[i])
+    
+    vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", list_anno[i]),
+                         col_names = T)
+    l <- nrow(vis_anno)
+    id_visit <- substr(list_anno[i], 1, 6)
+    vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
+                       col_names = T)
+    
+    vis_merged <- inner_join(vis_anno,
+                             vis_ap,
+                             by = c("ID", "Visit", "time"))
+    n <- nrow(vis_merged)
+    
+    # Check #1
+    if (l == n) {
+      
+      # don't need time column anymore since they are matched in time
+      vis_merged <- vis_merged[, -3]
+      write_csv(vis_merged,
+                path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+      
+    } else {
+      
+      warning(paste(id_visit, "annotation and AP file do not match in time",
+                    sep = " "))
+      
+    }
+  }
 }
 
 AvsA.results <- function(one.sec.list) {

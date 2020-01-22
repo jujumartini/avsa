@@ -7,7 +7,6 @@ corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-
 
 process_anno(anno_file_list = anno_list,
              corr_timstamps_path = corr_timestamps)
-
 warnings()
 
 # check files under "check folder to see if Stopwatch matches up with 1 "NEWStartTime" timestamp
@@ -18,6 +17,15 @@ warnings()
 ap_list = list.files("./3_data/raw/events", ".csv")
 
 process_ap(ap_file_list = ap_list)
+warnings()
+
+
+# merging -----------------------------------------------------------------
+
+anno_clean_list = list.files("./3_data/processed/anno_clean/")
+
+merge_anno_ap(list_anno = anno_clean_list)
+warnings()
 
 
 # errors ------------------------------------------------------------------
@@ -51,18 +59,3 @@ image.frame <- image.frame[ ,-1]
 write.csv(image.frame, file = paste0("./data/image", 
                                      "/",
                                      "FLAC_1013V3_POSTURE_CHANG.CSV"))
-
-
-# merging -----------------------------------------------------------------
-
-filelist3 = list.files("./data/image", ".CSV")
-for (i in 1:length(filelist3)) {
-  merging.files(i)
-}
-
-warnings()
-
-
-# analysis ----------------------------------------------------------------
-
-
