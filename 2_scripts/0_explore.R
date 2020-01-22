@@ -512,28 +512,23 @@ sbs_anno <-sbs_anno[, c("ID",
 # on off times
 on_off <- log[log$ID == id, ]
 on_off <- on_off[on_off$Visit == visit, ]
+on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+class(on)
+off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
 
-#	if on/off times recorded - loop through and label time monitor is not worn
-if(dim(on_off)[1]>0) {
+#	label off times
+sbs_anno$off <- 1
+n <- dim(sbs_anno)[1]
+class(sbs_anno$time)
+inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+
+if (length(inds)>0) {
   
-  sbs_anno$off <- 1
+  sbs_anno$off[inds] <- 0
   
-  on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
-  class(on)
-  off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
-  n <- dim(sbs_anno)[1]
-  class(sbs_anno$time)
-  inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+} else {
   
-  if (length(inds)>0) {
-    
-    sbs_anno$off[inds] <- 0
-    
-  }
-  
-} else if(dim(on_off)[1]==0) {
-  
-  sbs_anno$off <- "No.On.Off.Log"	
+  message("Stopwatch Timestamp or on-off entry is incorrect")
   
 }
 
@@ -555,10 +550,159 @@ write.table(vis_anno,
             row.names = F)
 
 
+# process_anno - Test 4 ---------------------------------------------------
+# test with on off log in 1_load.R script
+corr_timstamps_path <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
+
+test = "FLAC_1085V1_POSTURE_CHANG.CSV"
+
+# read in timestamps csv and change to times
+corr_times <- read.csv(file = corr_timstamps_path)
+corr_times$StopWatch_YMD_HMS <- ymd_hms(corr_times$StopWatch_YMD_HMS, 
+                                        tz="America/Chicago")
+corr_times$Corr_Picture_YMD_HMS <- ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
+                                           tz="America/Chicago")
+
+# diff col
+corr_times$Difference <- NA
+corr_times$Difference <- with(corr_times,
+                              difftime(StopWatch_YMD_HMS,
+                                       Corr_Picture_YMD_HMS,
+                                       units = "secs"))
+
+# sbs function for code times
+sbs <- function(i) {
+  
+  new <- seq.POSIXt(mer_anno$NEWstarttime[i],
+                    mer_anno$NEWendtime[i], by = "sec")
+  annotation <- rep(mer_anno$annotation[i],
+                    length(new))
+  data.frame(time = new,
+             annotation = annotation)
+  
+}
+
+# create processed anno files
+  print(test)
+  
+  raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", test),
+                         header = T,
+                         sep = ",")
+  
+  raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+                                tz="UTC")
+  raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                              tz="UTC")
+  raw_anno$startTime <- with_tz(raw_anno$startTime,
+                                tz = "America/Chicago")
+  raw_anno$endTime <- with_tz(raw_anno$endTime,
+                              tz = "America/Chicago")
+  
+  # merge times and raw
+  id <- as.integer(substr(test, 6, 9))
+  visit <- as.integer(substr(test, 11, 11))
+  raw_anno$ID <- id
+  raw_anno$Visit = visit
+  mer_anno <- merge(raw_anno,
+                    corr_times,
+                    by = c("ID",
+                           "Visit"))
+  
+  # check#1: See if timestamp was entered
+  if (dim(mer_anno)[1] == 0) {
+    
+    message("Error: Annotation does not have an entry in Timestamps.csv")
+    
+  } else {
+    
+    # add diff to times
+    mer_anno$NEWstarttime <- NA
+    mer_anno <- mer_anno %>%
+      mutate(NEWstarttime = if_else(!is.na(Difference),
+                                    startTime + Difference,
+                                    startTime))
+    mer_anno$NEWendtime <- NA
+    mer_anno <- mer_anno %>%
+      mutate(NEWendtime = if_else(!is.na(Difference),
+                                  endTime + Difference,
+                                  endTime))
+    
+    # to POSIXlt for padding later 
+    mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                      format="%Y-%m-%d %H:%M:%OS")
+    mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                    format="%Y-%m-%d %H:%M:%OS")
+    
+    # write a "check" csv file to see if stopwatch matches NEW start time
+    write.table(mer_anno,
+                file = paste0("./3_data/processed/anno_check/", id, "V", visit, ".csv"),
+                sep = ",",
+                row.names = F)
+    
+    # sbs
+    n <- nrow(mer_anno)
+    l <- lapply(1:n, sbs)
+    sbs_anno <- Reduce(rbind, l) %>% 
+      pad()
+    
+    # changing NA's to transition;gap
+    levels <- levels(sbs_anno$annotation)
+    levels[length(levels) + 1] <- "transition;gap"
+    sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                  levels = levels)
+    sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
+    
+    # on off times
+    on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
+    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+    
+    #	label off times
+    sbs_anno$off <- 1
+    n <- dim(sbs_anno)[1]
+    class(sbs_anno$time)
+    inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+    sbs_anno$off[inds] <- 0
+    
+    # check#2: see if off times were actually labeled
+    inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
+    i <- length(inds_worn)
+    if(i == 0) {
+      
+      message("Error: Stopwatch Timestamp or on-off entry is incorrect")
+      
+    } else {
+      
+      # Clean - avsa specific
+      vis_anno <- sbs_anno[sbs_anno$off == 0, ] # remove off times
+      vis_anno$time <- as.POSIXct(vis_anno$time, 
+                                  tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+      vis_anno$ID <- id # add in ID
+      vis_anno$Visit <- visit # add in Visit number
+      vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+      vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+      vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
+      vis_anno <-vis_anno[, c("ID",
+                              "Visit",
+                              "time",
+                              "annotation")]
+      
+      # write table
+      write.table(vis_anno,
+                  file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
+                  sep = ",",
+                  row.names = F)
+    }
+  }
+
+
+
 
 
 # process_ap - Test 1 -----------------------------------------------------
-# with ap file before 11/2018
+# test with ap file before 11/2018
 on_off_log <- "visit_on_off_log.csv"
 
 test <- "1002V3-AP740063 16Feb18 9-35am for 4h 24m-AOSD-CL08090134-Events.csv"
@@ -600,8 +744,6 @@ log$date_time_on <- force_tz(log$date_time_on,
 log$date_time_off <- force_tz(log$date_time_off,
                               tz = "America/Chicago")
 
-
-
 # for loop begins
 raw_ap <- read.table(file = paste0("./3_data/raw/events/", test),
                      header = T,
@@ -637,7 +779,6 @@ if(is.character(raw_ap$time) == T & t == n) {
                                     origin = "1899-12-30"))
   raw_ap$time <- as.POSIXlt(raw_ap$time,
                             tz = "UTC")
-  attr(raw_ap$time, "tzone")
   
   # for some reason, converting to UTC actually makes it relevant time zone
   raw_ap$time <- force_tz(raw_ap$time,
@@ -645,7 +786,6 @@ if(is.character(raw_ap$time) == T & t == n) {
   raw_ap$time <- strptime(raw_ap$time,
                           format = "%Y-%m-%d %H:%M:%S")
 
-  
 }
 
 # correction factor for ap files after 11/01/2018
@@ -656,11 +796,6 @@ if (date(raw_ap$time)[1] > as.Date("2018-11-01")) {
 }
 
 # second by second
-sbs_ap <- data.frame(time=NA, date=NA, ap.posture=NA, mets=NA, met.hours=NA, steps=NA)
-sbs_ap <- sbs_ap[-1,]
-
-raw_ap$interval <- as.numeric(raw_ap$interval)
-raw_ap$methrs <- as.numeric(raw_ap$methrs)
 n <- dim(raw_ap)[1]
 
 # maybe use this code for noldus!!
@@ -669,118 +804,1070 @@ time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
                                       strptime(raw_ap$time[seq_len(n - 1)],
                                                format="%Y-%m-%d %H:%M:%S"),
                                       units = "secs"))
-start.time <- strptime(raw_ap$time[1],format="%Y-%m-%d %H:%M:%S")
+time_each_event <- c(time_each_event,
+                     round(raw_ap[n,"interval"],
+                           0))
+time_each_event[is.na(time_each_event) == T] <- 1
 
-time.of.each.event <- c(time.of.each.event, round(raw_ap[n,"interval"],0))
-te <- length(time.of.each.event)
-time.of.each.event[is.na(time.of.each.event)==T] <- 1
-events <- rep((1:te),time.of.each.event)
+# sbs variables
+te <- length(time_each_event)
+events <- rep((1:te),
+              time_each_event)
+acts <- rep(raw_ap$activity,
+            time_each_event)
+l <- length(acts)
+ap_start <- strptime(raw_ap$time[1],
+                       format="%Y-%m-%d %H:%M:%S")
+times <- ap_start + (0:(l - 1))
 
-acts <- rep(raw_ap$activity,time.of.each.event)
-n <- length(acts)
 # The met hours per second in the interval.
-met.hours <- raw_ap$methrs/raw_ap$interval 	
-met.hours <- rep(met.hours,time.of.each.event)
+raw_ap$interval <- as.numeric(raw_ap$interval)
+raw_ap$methrs <- as.numeric(raw_ap$methrs)
+
+met_hrs <- raw_ap$methrs / raw_ap$interval 	
+met_hrs <- rep(met_hrs,
+               time_each_event)
+
 # To compute mets per second in the interval, multiply methours by 3600 sec/hour and divide by number of seconds.
-mets <- raw_ap$methrs * 3600/raw_ap$interval
-mets <- rep(mets,time.of.each.event)
-steps <- rep(raw_ap$cumulativesteps,time.of.each.event)
+mets <- raw_ap$methrs * 3600 / raw_ap$interval
+mets <- rep(mets,
+            time_each_event)
+steps <- rep(raw_ap$cumulativesteps,
+             time_each_event)
+
 # Make 15-sec epoch variable and METs
-times <- start.time+(0:(n-1))
-fifteen.sec.times <- start.time + (15*rep(0:(floor(n/15)),each=15,length=n))
-fifteen.sec.mets <- tapply(mets, fifteen.sec.times, mean)
-fifteen.sec.mets <- rep(fifteen.sec.mets, each=15, length=n)
+fifteen_sec_times <- ap_start + (15 * rep(0:(floor(l / 15)),
+                                            each = 15,
+                                            length = l))
+fifteen_sec_mets <- tapply(mets,
+                           INDEX = fifteen_sec_times,
+                           FUN = mean)
+fifteen_sec_mets <- rep(fifteen_sec_mets,
+                        each = 15,
+                        length = l)
 
 # Make 1-min epoch variable and METs
-times <- start.time+(0:(n-1))
-one.min.times <- start.time + (60*rep(0:(floor(n/60)),each=60,length=n))
-one.min.mets <- tapply(mets, one.min.times, mean)
-one.min.mets <- rep(one.min.mets, each=60, length=n)
+one_min_times <- ap_start + (60 * rep(0:(floor(l / 60)),
+                                        each = 60,
+                                        length = l))
+one_min_mets <- tapply(mets,
+                       INDEX = one_min_times,
+                       FUN = mean)
+one_min_mets <- rep(one_min_mets,
+                    each = 60,
+                    length = l)
 
-date <- substring(format(times),1,10)
+date <- substring(format(times), 1, 10)
 
-sbs_ap <- merge(sbs_ap, data.frame(time=times, date=date, ap.posture=acts, mets=mets, fifteen.sec.mets=fifteen.sec.mets, one.min.mets=one.min.mets, met.hours=met.hours, steps=steps, num.events=events, stringsAsFactors=FALSE), all=TRUE)
+# data frame
+sbs_ap <- data.frame(time = NA,
+                     date = NA,
+                     ap_posture = NA,
+                     mets = NA,
+                     met_hours = NA,
+                     steps = NA,
+                     num_events = NA,
+                     stringsAsFactors = F)
+sbs_ap <- sbs_ap[-1,]
+sbs_ap <- merge(sbs_ap,
+                data.frame(time = times,
+                           date = date,
+                           ap_posture = acts,
+                           mets = mets,
+                           fifteen_sec_mets = fifteen_sec_mets,
+                           one_min_mets = one_min_mets,
+                           met_hours = met_hrs,
+                           steps = steps,
+                           num_events = events,
+                           stringsAsFactors = F),
+                all = T)
+sbs_ap$mets <- signif(sbs_ap$mets,
+                      digits = 3)
 
-sbs_ap$mets <- signif(sbs_ap$mets,3)
+# on off times
+id <- substr(test, 1, 4)
+visit <- substr(test, 6, 6)
+on_off <- log[log$ID == id, ]
+on_off <- on_off[on_off$Visit == visit, ]
 
-
-### on/off ###
-
-on.off.log <- read.csv("./data/master_ACC_diary.csv")
-on.off.log$id <- as.character(on.off.log$id)
-ID = as.integer(substr(testap, 6, 9))
-Visit = as.character(substr(testap, 11, 12))
-on.off.log <- filter(on.off.log, id == ID)
-on.off.log <- filter(on.off.log, visit == Visit)
-
-on.off.log$date.on <- paste(on.off.log$date.on.month,on.off.log$date.on.day,on.off.log$date.on.year,sep="/")
-on.off.log$time.on <- paste(on.off.log$time.on.hour,on.off.log$time.on.minute,on.off.log$time.on.seconds,sep=":")
-
-on.off.log$date.off <- paste(on.off.log$date.off.month,on.off.log$date.off.day,on.off.log$date.off.year,sep="/")
-on.off.log$time.off <- paste(on.off.log$time.off.hour,on.off.log$time.off.minute,on.off.log$time.off.seconds,sep=":")
-
-on.off.log$date.time.on <- paste(on.off.log$date.on, on.off.log$time.on, sep=" ")
-on.off.log$date.time.off <- paste(on.off.log$date.off, on.off.log$time.off, sep=" ")
-
-on.off.log$date.time.on <- strptime(on.off.log$date.time.on,"%m/%d/%Y %H:%M:%S")
-on.off.log$date.time.off <- strptime(on.off.log$date.time.off,"%m/%d/%Y %H:%M:%S")
-
-on.off.log$date.time.on <- 
-  force_tz(on.off.log$date.time.on, tz = "America/Chicago")
-
-
-on.off.log$date.time.off <- 
-  force_tz(on.off.log$date.time.off, tz = "America/Chicago")
-
-
-on.off.log$hours.on <- as.vector(difftime(strptime(on.off.log$date.time.off,format="%Y-%m-%d %H:%M:%S"),strptime(on.off.log$date.time.on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
-
-sec.by.sec.data$time <- strptime(sec.by.sec.data$time,"%Y-%m-%d %H:%M:%S")
-
-#	if on/off times recorded - loop through and label time monitor is not worn
-if(dim(on.off.log)[1]>0)
-{
-  sec.by.sec.data$off <- 1	
-  for (t in (1:dim(on.off.log)[1]))
-  {
-    on <- strptime(on.off.log$date.time.on[t],"%Y-%m-%d %H:%M:%S")
-    class(on)
-    off <- strptime(on.off.log$date.time.off[t],"%Y-%m-%d %H:%M:%S")
-    n <- dim(sec.by.sec.data)[1]
-    class(sec.by.sec.data$time)
-    inds <- (1:n)[((sec.by.sec.data$time>=on)&(sec.by.sec.data$time<=off))]
-    if (length(inds)>0)
-      sec.by.sec.data$off[inds] <- 0
+if (dim(on_off)[1] == 0) {
+  
+  sbs_ap$off <- "Subject/Visit not in on_off_log"		
+  message("Subject/Visit not in on_off_log")
+  
+} else {
+  
+  on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+  off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+  
+  #	label off times
+  sbs_ap$off <- 1
+  l <- dim(sbs_ap)[1]
+  class(sbs_ap$time)
+  inds <- (1:l)[(sbs_ap$time >= on) & (sbs_ap$time <= off)]
+  
+  if (length(inds) > 0) {
+    
+    sbs_ap$off[inds] <- 0
+    
+  } else {
+    
+    sbs_ap$off <- "AP and on_off do not match"
+    message("AP and on_off do not match")
+    
   }
-  if(dim(on.off.log)[1]==0)
-    sec.by.sec.data$off <- "No.On.Off.Log"	
-}	#end on/off loop
+}
 
-
-### Clean ###
-sec.by.sec.data$time <- 
-  as.POSIXct(sec.by.sec.data$time, 
+# Clean - avsa specific
+vis_ap$time <- 
+  as.POSIXct(vis_ap$time, 
              tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
-sec.by.sec.data <- 
-  sec.by.sec.data[!(sec.by.sec.data$off==1), ] #remove non-visit time#
-sec.by.sec.data$ID <- 
-  as.integer(substr(testap, 6, 9)) #add in ID
-sec.by.sec.data$Visit <-
-  as.integer(substr(testap, 12, 12)) #add in visit
-sec.by.sec.data <- 
-  sec.by.sec.data[ , c(11,12,1,3)] #only need ap.posture column
-sec.by.sec.data$ap.posture <- 
-  as.character(sec.by.sec.data$ap.posture) #change to character for next step
-sec.by.sec.data$ap.posture[sec.by.sec.data$ap.posture == "0"] <- "posture;0006 sitting" 
-sec.by.sec.data$ap.posture[sec.by.sec.data$ap.posture == "1"] <- "posture;0007 standing" 
-sec.by.sec.data$ap.posture[sec.by.sec.data$ap.posture == "2"] <- "posture;0008 movement"
-Filename3 = aplist2[event.file]
-write.csv(sec.by.sec.data, file = paste0("./data/ap/", Filename3))
+vis_ap <- 
+  sbs_ap[!(sbs_ap$off == 1), ] #remove non-visit time#
+vis_ap$ID <- as.numeric(id) #add in ID
+vis_ap$Visit <- as.numeric(visit) #add in visit
+vis_ap <- 
+  vis_ap[ , c("ID",
+              "Visit",
+              "time",
+              "ap_posture")]
+
+# write data frame
+write.table(vis_ap,
+            file = paste0("./3_data/processed/ap_clean/", id, "V", visit, ".csv"),
+            sep = ",",
+            row.names = F)
 
 
+# process_ap - Test 2 -----------------------------------------------------
+# test with ap file after 11/2018, n-y dst
+on_off_log <- "visit_on_off_log.csv"
+
+test <- "1087V2-AP740077 15Dec10 3-39pm for 3h 58m-AOSD-CL08090134-Events.csv"
+
+# read in on off log and clean
+log <- read.table(file = paste0("./3_data/raw/", on_off_log),
+                  header = T,
+                  sep = ",",
+                  stringsAsFactors = F)
+
+log$date_on <- paste(log$date_on_month,
+                     log$date_on_day,
+                     log$date_on_year,
+                     sep="/")
+log$time_on <- paste(log$time_on_hour,
+                     log$time_on_minute,
+                     log$time_on_seconds,
+                     sep=":")
+log$date_off <- paste(log$date_off_month,
+                      log$date_off_day,
+                      log$date_off_year,
+                      sep="/")
+log$time_off <- paste(log$time_off_hour,
+                      log$time_off_minute,
+                      log$time_off_seconds,
+                      sep=":")
+log$date_time_on <- paste(log$date_on,
+                          log$time_on,
+                          sep=" ")
+log$date_time_off <- paste(log$date_off,
+                           log$time_off,
+                           sep=" ")
+log$date_time_on <- strptime(log$date_time_on,
+                             "%m/%d/%Y %H:%M:%S")
+log$date_time_off <- strptime(log$date_time_off,
+                              "%m/%d/%Y %H:%M:%S")
+log$date_time_on <- force_tz(log$date_time_on,
+                             tz = "America/Chicago")
+log$date_time_off <- force_tz(log$date_time_off,
+                              tz = "America/Chicago")
+
+# for loop begins
+raw_ap <- read.table(file = paste0("./3_data/raw/events/", test),
+                     header = T,
+                     sep = ",",
+                     stringsAsFactors = F)
+raw_ap <- raw_ap[,(1:6)]
+names(raw_ap) <- c("time",
+                   "datacount",
+                   "interval",
+                   "activity",
+                   "cumulativesteps",
+                   "methrs")
+
+# Change from Julian time to GMT
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap[,2] <- as.numeric(as.character(raw_ap[,2]))
+raw_ap[,3] <- as.numeric(as.character(raw_ap[,3]))
+raw_ap[,4] <- as.numeric(as.character(raw_ap[,4]))
+raw_ap[,5] <- as.numeric(as.character(raw_ap[,5]))*2 #event files have half the actual number of steps for some reason
+raw_ap[,6] <- as.numeric(as.character(raw_ap[,6]))
+
+t <- dim(raw_ap)[1]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "1899-12-30"), ]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "0"), ]
+n <- dim(raw_ap)[1]		
+class(raw_ap$time)
+
+if(is.character(raw_ap$time) == T & t == n) {
+  
+  raw_ap$time <- as.numeric(raw_ap$time)
+  raw_ap$time <- as.POSIXct(as.Date(raw_ap$time,
+                                    origin = "1899-12-30"))
+  raw_ap$time <- as.POSIXlt(raw_ap$time,
+                            tz = "UTC")
+  
+  # for some reason, converting to UTC actually makes it relevant time zone but w/o daylight savings
+  raw_ap$time <- force_tz(raw_ap$time,
+                          tz = "America/Chicago")
+  raw_ap$time <- strptime(raw_ap$time,
+                          format = "%Y-%m-%d %H:%M:%S")
+  
+}
+
+# check#1: correction factor + dst offset
+id <- substr(test, 1, 4)
+visit <- substr(test, 6, 6)
+on_off <- log[log$ID == id & log$Visit == visit, ]
+dim(on_off)[1]
+date_time_visit <- on_off$date_time_on
+date_time_file <- raw_ap$time[1]
+
+if (dim(on_off)[1] == 0) {
+  
+  message("Subject/Visit not in on_off_log")
+  
+} else {
+  
+  # correction factor for ap files after 11/01/2018
+  on_off$date_time_on > as.Date("2018-11-01")
+  
+  if (date_time_visit > as.Date("2018-11-01")) {
+    
+    ### CORRECTION FACTOR ###
+    raw_ap$time <- raw_ap$time + 3106.8918*24*60*60
+    
+    ### after testing all files were at least 6 sec off ###
+    raw_ap$time <- raw_ap$time + 6 
+    
+  }
+}
+
+# daylight savings
+x <- ymd_hms("2010-11-06, 10:00:00") %>% 
+  strptime(.,
+           format = "%Y-%m-%d %H:%M:%S")
+dst(x)
+dst(date_time_file)
+dst(date_time_visit)
+
+isTRUE(dst(date_time_file))
+isFALSE(dst(date_time_file))
+
+isTRUE(dst(date_time_visit))
+isFALSE(dst(date_time_visit))
+
+if (all(isFALSE(dst(date_time_file)), 
+        isTRUE(dst(date_time_visit)))) {
+  
+  # n-y: substract 1 hour because it is ahead
+  raw_ap$time <- raw_ap$time - 60*60 
+  
+} else if (all(isTRUE(dst(date_time_file)), 
+               isFALSE(dst(date_time_visit)))) {
+  
+  # y-n: add 1 hour because it is behind
+  raw_ap$time <- raw_ap$time + 60*60
+  
+}
+
+# second by second
+n <- dim(raw_ap)[1]
+time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      strptime(raw_ap$time[seq_len(n - 1)],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      units = "secs"))
+time_each_event <- c(time_each_event,
+                     round(raw_ap[n,"interval"],
+                           0))
+time_each_event[is.na(time_each_event) == T] <- 1
+
+# sbs variables
+te <- length(time_each_event)
+events <- rep((1:te),
+              time_each_event)
+acts <- rep(raw_ap$activity,
+            time_each_event)
+l <- length(acts)
+ap_start <- strptime(raw_ap$time[1],
+                     format="%Y-%m-%d %H:%M:%S")
+times <- ap_start + (0:(l - 1))
+
+# The met hours per second in the interval.
+raw_ap$interval <- as.numeric(raw_ap$interval)
+raw_ap$methrs <- as.numeric(raw_ap$methrs)
+
+met_hrs <- raw_ap$methrs / raw_ap$interval 	
+met_hrs <- rep(met_hrs,
+               time_each_event)
+
+# To compute mets per second in the interval, multiply methours by 3600 sec/hour and divide by number of seconds.
+mets <- raw_ap$methrs * 3600 / raw_ap$interval
+mets <- rep(mets,
+            time_each_event)
+steps <- rep(raw_ap$cumulativesteps,
+             time_each_event)
+
+# Make 15-sec epoch variable and METs
+fifteen_sec_times <- ap_start + (15 * rep(0:(floor(l / 15)),
+                                          each = 15,
+                                          length = l))
+fifteen_sec_mets <- tapply(mets,
+                           INDEX = fifteen_sec_times,
+                           FUN = mean)
+fifteen_sec_mets <- rep(fifteen_sec_mets,
+                        each = 15,
+                        length = l)
+
+# Make 1-min epoch variable and METs
+one_min_times <- ap_start + (60 * rep(0:(floor(l / 60)),
+                                      each = 60,
+                                      length = l))
+one_min_mets <- tapply(mets,
+                       INDEX = one_min_times,
+                       FUN = mean)
+one_min_mets <- rep(one_min_mets,
+                    each = 60,
+                    length = l)
+
+date <- substring(format(times), 1, 10)
+
+# data frame
+sbs_ap <- data.frame(time = NA,
+                     date = NA,
+                     ap_posture = NA,
+                     mets = NA,
+                     met_hours = NA,
+                     steps = NA,
+                     num_events = NA,
+                     stringsAsFactors = F)
+sbs_ap <- sbs_ap[-1,]
+sbs_ap <- merge(sbs_ap,
+                data.frame(time = times,
+                           date = date,
+                           ap_posture = acts,
+                           mets = mets,
+                           fifteen_sec_mets = fifteen_sec_mets,
+                           one_min_mets = one_min_mets,
+                           met_hours = met_hrs,
+                           steps = steps,
+                           num_events = events,
+                           stringsAsFactors = F),
+                all = T)
+sbs_ap$mets <- signif(sbs_ap$mets,
+                      digits = 3)
+
+# on off times
+on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+
+#	label off times
+sbs_ap$off <- 1
+l <- dim(sbs_ap)[1]
+class(sbs_ap$time)
+inds <- (1:l)[(sbs_ap$time >= on) & (sbs_ap$time <= off)]
+sbs_ap$off[inds] <- 0
+
+# check#2: see if off times were actually labeled
+inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
+i <- length(inds_worn)
+if(i == 0) {
+  
+  sbs_ap$off <- "AP and on.off.log do not match"
+  message("AP and on_off do not match")
+  
+} else {
+  
+  # Clean - avsa specific
+  vis_ap <- 
+    sbs_ap[!(sbs_ap$off == 1), ] #remove non-visit time#
+  vis_ap$time <- 
+    as.POSIXct(vis_ap$time, 
+               tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+  vis_ap$ID <- as.numeric(id) #add in ID
+  vis_ap$Visit <- as.numeric(visit) #add in visit
+  vis_ap <- 
+    vis_ap[ , c("ID",
+                "Visit",
+                "time",
+                "ap_posture")]
+  
+  # write data frame
+  write.table(vis_ap,
+              file = paste0("./3_data/processed/ap_clean/", id, "V", visit, ".csv"),
+              sep = ",",
+              row.names = F)
+  
+}
+
+
+# process_ap - Test 3 -----------------------------------------------------
+# test with ap file after 11/2018, y-n dst
+on_off_log <- "visit_on_off_log.csv"
+
+test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv"
+
+# read in on off log and clean
+log <- read.table(file = paste0("./3_data/raw/", on_off_log),
+                  header = T,
+                  sep = ",",
+                  stringsAsFactors = F)
+
+log$date_on <- paste(log$date_on_month,
+                     log$date_on_day,
+                     log$date_on_year,
+                     sep="/")
+log$time_on <- paste(log$time_on_hour,
+                     log$time_on_minute,
+                     log$time_on_seconds,
+                     sep=":")
+log$date_off <- paste(log$date_off_month,
+                      log$date_off_day,
+                      log$date_off_year,
+                      sep="/")
+log$time_off <- paste(log$time_off_hour,
+                      log$time_off_minute,
+                      log$time_off_seconds,
+                      sep=":")
+log$date_time_on <- paste(log$date_on,
+                          log$time_on,
+                          sep=" ")
+log$date_time_off <- paste(log$date_off,
+                           log$time_off,
+                           sep=" ")
+log$date_time_on <- strptime(log$date_time_on,
+                             "%m/%d/%Y %H:%M:%S")
+log$date_time_off <- strptime(log$date_time_off,
+                              "%m/%d/%Y %H:%M:%S")
+log$date_time_on <- force_tz(log$date_time_on,
+                             tz = "America/Chicago")
+log$date_time_off <- force_tz(log$date_time_off,
+                              tz = "America/Chicago")
+
+# for loop begins
+raw_ap <- read.table(file = paste0("./3_data/raw/events/", test),
+                     header = T,
+                     sep = ",",
+                     stringsAsFactors = F)
+raw_ap <- raw_ap[,(1:6)]
+names(raw_ap) <- c("time",
+                   "datacount",
+                   "interval",
+                   "activity",
+                   "cumulativesteps",
+                   "methrs")
+
+# Change from Julian time to GMT
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap[,2] <- as.numeric(as.character(raw_ap[,2]))
+raw_ap[,3] <- as.numeric(as.character(raw_ap[,3]))
+raw_ap[,4] <- as.numeric(as.character(raw_ap[,4]))
+raw_ap[,5] <- as.numeric(as.character(raw_ap[,5]))*2 #event files have half the actual number of steps for some reason
+raw_ap[,6] <- as.numeric(as.character(raw_ap[,6]))
+
+t <- dim(raw_ap)[1]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "1899-12-30"), ]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "0"), ]
+n <- dim(raw_ap)[1]		
+class(raw_ap$time)
+
+if(is.character(raw_ap$time) == T & t == n) {
+  
+  raw_ap$time <- as.numeric(raw_ap$time)
+  raw_ap$time <- as.POSIXct(as.Date(raw_ap$time,
+                                    origin = "1899-12-30"))
+  raw_ap$time <- as.POSIXlt(raw_ap$time,
+                            tz = "UTC")
+  
+  # for some reason, converting to UTC actually makes it relevant time zone but w/o daylight savings
+  raw_ap$time <- force_tz(raw_ap$time,
+                          tz = "America/Chicago")
+  raw_ap$time <- strptime(raw_ap$time,
+                          format = "%Y-%m-%d %H:%M:%S")
+  
+}
+
+# check#1: correction factor + dst offset
+id <- substr(test, 1, 4)
+visit <- substr(test, 6, 6)
+on_off <- log[log$ID == id & log$Visit == visit, ]
+dim(on_off)[1]
+date_time_visit <- on_off$date_time_on
+date_time_file <- raw_ap$time[1]
+
+if (dim(on_off)[1] == 0) {
+  
+  message("Subject/Visit not in on_off_log")
+  
+} else if (date_time_visit > as.Date("2018-11-01")) { # correction factor for ap files after 11/01/2018
+    
+  ### CORRECTION FACTOR ###
+  raw_ap$time <- raw_ap$time + 3106.8918*24*60*60
+  
+  ### after testing all files were at least 6 sec off ###
+  raw_ap$time <- raw_ap$time + 6 
+  
+}
+
+# daylight savings
+x <- ymd_hms("2010-11-06, 10:00:00") %>% 
+  strptime(.,
+           format = "%Y-%m-%d %H:%M:%S")
+dst(x)
+dst(date_time_file)
+dst(date_time_visit)
+
+isTRUE(dst(date_time_file))
+isFALSE(dst(date_time_file))
+
+isTRUE(dst(date_time_visit))
+isFALSE(dst(date_time_visit))
+
+if (all(isFALSE(dst(date_time_file)), 
+        isTRUE(dst(date_time_visit)))) {
+  
+  # n-y: substract 1 hour because it is ahead
+  raw_ap$time <- raw_ap$time - 60*60 
+  
+} else if (all(isTRUE(dst(date_time_file)), 
+               isFALSE(dst(date_time_visit)))) {
+  
+  # y-n: add 1 hour because it is behind
+  raw_ap$time <- raw_ap$time + 60*60
+  
+}
+
+# second by second
+n <- dim(raw_ap)[1]
+time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      strptime(raw_ap$time[seq_len(n - 1)],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      units = "secs"))
+time_each_event <- c(time_each_event,
+                     round(raw_ap[n,"interval"],
+                           0))
+time_each_event[is.na(time_each_event) == T] <- 1
+
+# sbs variables
+te <- length(time_each_event)
+events <- rep((1:te),
+              time_each_event)
+acts <- rep(raw_ap$activity,
+            time_each_event)
+l <- length(acts)
+ap_start <- strptime(raw_ap$time[1],
+                     format="%Y-%m-%d %H:%M:%S")
+times <- ap_start + (0:(l - 1))
+
+# The met hours per second in the interval.
+raw_ap$interval <- as.numeric(raw_ap$interval)
+raw_ap$methrs <- as.numeric(raw_ap$methrs)
+
+met_hrs <- raw_ap$methrs / raw_ap$interval 	
+met_hrs <- rep(met_hrs,
+               time_each_event)
+
+# To compute mets per second in the interval, multiply methours by 3600 sec/hour and divide by number of seconds.
+mets <- raw_ap$methrs * 3600 / raw_ap$interval
+mets <- rep(mets,
+            time_each_event)
+steps <- rep(raw_ap$cumulativesteps,
+             time_each_event)
+
+# Make 15-sec epoch variable and METs
+fifteen_sec_times <- ap_start + (15 * rep(0:(floor(l / 15)),
+                                          each = 15,
+                                          length = l))
+fifteen_sec_mets <- tapply(mets,
+                           INDEX = fifteen_sec_times,
+                           FUN = mean)
+fifteen_sec_mets <- rep(fifteen_sec_mets,
+                        each = 15,
+                        length = l)
+
+# Make 1-min epoch variable and METs
+one_min_times <- ap_start + (60 * rep(0:(floor(l / 60)),
+                                      each = 60,
+                                      length = l))
+one_min_mets <- tapply(mets,
+                       INDEX = one_min_times,
+                       FUN = mean)
+one_min_mets <- rep(one_min_mets,
+                    each = 60,
+                    length = l)
+
+date <- substring(format(times), 1, 10)
+
+# data frame
+sbs_ap <- data.frame(time = NA,
+                     date = NA,
+                     ap_posture = NA,
+                     mets = NA,
+                     met_hours = NA,
+                     steps = NA,
+                     num_events = NA,
+                     stringsAsFactors = F)
+sbs_ap <- sbs_ap[-1,]
+sbs_ap <- merge(sbs_ap,
+                data.frame(time = times,
+                           date = date,
+                           ap_posture = acts,
+                           mets = mets,
+                           fifteen_sec_mets = fifteen_sec_mets,
+                           one_min_mets = one_min_mets,
+                           met_hours = met_hrs,
+                           steps = steps,
+                           num_events = events,
+                           stringsAsFactors = F),
+                all = T)
+sbs_ap$mets <- signif(sbs_ap$mets,
+                      digits = 3)
+
+# on off times
+on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+
+#	label off times
+sbs_ap$off <- 1
+l <- dim(sbs_ap)[1]
+class(sbs_ap$time)
+inds <- (1:l)[(sbs_ap$time >= on) & (sbs_ap$time <= off)]
+sbs_ap$off[inds] <- 0
+
+# check#2: see if off times were actually labeled
+inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
+i <- length(inds_worn)
+if(i == 0) {
+  
+  sbs_ap$off <- "AP and on.off.log do not match"
+  message("AP and on_off do not match")
+  
+} else {
+  
+  # Clean - avsa specific
+  vis_ap <- 
+    sbs_ap[!(sbs_ap$off == 1), ] #remove non-visit time#
+  vis_ap$time <- 
+    as.POSIXct(vis_ap$time, 
+               tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+  vis_ap$ID <- as.numeric(id) #add in ID
+  vis_ap$Visit <- as.numeric(visit) #add in visit
+  vis_ap <- 
+    vis_ap[ , c("ID",
+                "Visit",
+                "time",
+                "ap_posture")]
+  
+  # write data frame
+  write.table(vis_ap,
+              file = paste0("./3_data/processed/ap_clean/", id, "V", visit, ".csv"),
+              sep = ",",
+              row.names = F)
+}
+
+
+# process_ap - Test 4 -----------------------------------------------------
+# test with on off log in 1_load.R script
+test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv"
+
+print(test)
+
+raw_ap <- read.table(file = paste0("./3_data/raw/events/", test),
+                     header = T,
+                     sep = ",",
+                     stringsAsFactors = F)
+raw_ap <- raw_ap[,(1:6)]
+names(raw_ap) <- c("time",
+                   "datacount",
+                   "interval",
+                   "activity",
+                   "cumulativesteps",
+                   "methrs")
+
+# Change from Julian time to GMT
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap$time <- sub("#", "", raw_ap$time)
+raw_ap[,2] <- as.numeric(as.character(raw_ap[,2]))
+raw_ap[,3] <- as.numeric(as.character(raw_ap[,3]))
+raw_ap[,4] <- as.numeric(as.character(raw_ap[,4]))
+raw_ap[,5] <- as.numeric(as.character(raw_ap[,5]))*2 #event files have half the actual number of steps for some reason
+raw_ap[,6] <- as.numeric(as.character(raw_ap[,6]))
+
+t <- dim(raw_ap)[1]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "1899-12-30"), ]
+raw_ap <- raw_ap[!(raw_ap[,"time"] == "0"), ]
+n <- dim(raw_ap)[1]		
+
+if(is.character(raw_ap$time) == T & t == n) {
+  
+  raw_ap$time <- as.numeric(raw_ap$time)
+  raw_ap$time <- as.POSIXct(as.Date(raw_ap$time,
+                                    origin = "1899-12-30"))
+  raw_ap$time <- as.POSIXlt(raw_ap$time,
+                            tz = "UTC")
+  
+  # for some reason, converting to UTC actually makes it relevant time zone
+  raw_ap$time <- force_tz(raw_ap$time,
+                          tz = "America/Chicago")
+  raw_ap$time <- strptime(raw_ap$time,
+                          format = "%Y-%m-%d %H:%M:%S")
+  
+}
+
+# check#1: See if ap file is in log +correction factor + dst offset
+id <- substr(test, 1, 4)
+visit <- substr(test, 6, 6)
+on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
+date_time_visit <- on_off$date_time_on
+date_time_file <- raw_ap$time[1]
+
+if (dim(on_off)[1] == 0) {
+  
+  message("Error: Subject/Visit not in on_off_log")
+  
+} else {
+  
+  # correction factor for ap files after 11/01/2018
+  if (date_time_visit > as.Date("2018-11-01")) { 
+    
+    ### CORRECTION FACTOR ###
+    raw_ap$time <- raw_ap$time + 3106.8918*24*60*60
+    
+    ### after testing all files were at least 6 sec off ###
+    raw_ap$time <- raw_ap$time + 6 
+    
+    # daylight savings
+    if (all(isFALSE(dst(date_time_file)), 
+            isTRUE(dst(date_time_visit)))) {
+      
+      # n-y: substract 1 hour because it is ahead
+      raw_ap$time <- raw_ap$time - 60*60 
+      
+    } else if (all(isTRUE(dst(date_time_file)), 
+                   isFALSE(dst(date_time_visit)))) {
+      
+      # y-n: add 1 hour because it is behind
+      raw_ap$time <- raw_ap$time + 60*60
+      
+    }
+  }
+  
+  # second by second
+  n <- dim(raw_ap)[1]
+  time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+                                                 format="%Y-%m-%d %H:%M:%S"),
+                                        strptime(raw_ap$time[seq_len(n - 1)],
+                                                 format="%Y-%m-%d %H:%M:%S"),
+                                        units = "secs"))
+  time_each_event <- c(time_each_event,
+                       round(raw_ap[n,"interval"],
+                             0))
+  time_each_event[is.na(time_each_event) == T] <- 1
+  
+  # sbs variables
+  te <- length(time_each_event)
+  events <- rep((1:te),
+                time_each_event)
+  acts <- rep(raw_ap$activity,
+              time_each_event)
+  
+  l <- length(acts)
+  ap_start <- strptime(raw_ap$time[1],
+                       format="%Y-%m-%d %H:%M:%S")
+  times <- ap_start + (0:(l - 1))
+  
+  # The met hours per second in the interval.
+  raw_ap$interval <- as.numeric(raw_ap$interval)
+  raw_ap$methrs <- as.numeric(raw_ap$methrs)
+  
+  met_hrs <- raw_ap$methrs / raw_ap$interval 	
+  met_hrs <- rep(met_hrs,
+                 time_each_event)
+  
+  # To compute mets per second in the interval, multiply methours by 3600 sec/hour and divide by number of seconds.
+  mets <- raw_ap$methrs * 3600 / raw_ap$interval
+  mets <- rep(mets,
+              time_each_event)
+  steps <- rep(raw_ap$cumulativesteps,
+               time_each_event)
+  
+  # Make 15-sec epoch variable and METs
+  fifteen_sec_times <- ap_start + (15 * rep(0:(floor(l / 15)),
+                                            each = 15,
+                                            length = l))
+  fifteen_sec_mets <- tapply(mets,
+                             INDEX = fifteen_sec_times,
+                             FUN = mean)
+  fifteen_sec_mets <- rep(fifteen_sec_mets,
+                          each = 15,
+                          length = l)
+  
+  # Make 1-min epoch variable and METs
+  one_min_times <- ap_start + (60 * rep(0:(floor(l / 60)),
+                                        each = 60,
+                                        length = l))
+  one_min_mets <- tapply(mets,
+                         INDEX = one_min_times,
+                         FUN = mean)
+  one_min_mets <- rep(one_min_mets,
+                      each = 60,
+                      length = l)
+  
+  date <- substring(format(times), 1, 10)
+  
+  # data frame
+  sbs_ap <- data.frame(time = NA,
+                       date = NA,
+                       ap_posture = NA,
+                       mets = NA,
+                       met_hours = NA,
+                       steps = NA,
+                       num_events = NA,
+                       stringsAsFactors = F)
+  sbs_ap <- sbs_ap[-1,]
+  sbs_ap <- merge(sbs_ap,
+                  data.frame(time = times,
+                             date = date,
+                             ap_posture = acts,
+                             mets = mets,
+                             fifteen_sec_mets = fifteen_sec_mets,
+                             one_min_mets = one_min_mets,
+                             met_hours = met_hrs,
+                             steps = steps,
+                             num_events = events,
+                             stringsAsFactors = F),
+                  all = T)
+  sbs_ap$mets <- signif(sbs_ap$mets,
+                        digits = 3)
+  
+  # on off times
+  on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+  off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+  
+  #	label off times
+  sbs_ap$off <- 1
+  l <- dim(sbs_ap)[1]
+  class(sbs_ap$time)
+  inds <- (1:l)[(sbs_ap$time >= on) & (sbs_ap$time <= off)]
+  sbs_ap$off[inds] <- 0
+  
+  # check#2: see if off times were actually labeled
+  inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
+  i <- length(inds_worn)
+  if(i == 0) {
+    
+    message("Error: AP and on_off do not match")
+    
+  } else {
+    
+    # Clean - avsa specific
+    vis_ap <- sbs_ap[sbs_ap$off == 0, ] # remove non-visit time
+    vis_ap$time <- as.POSIXct(vis_ap$time, 
+                              tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+    vis_ap$ID <- as.numeric(id) #add in ID
+    vis_ap$Visit <- as.numeric(visit) #add in visit
+    vis_ap <- vis_ap[ , c("ID",
+                          "Visit",
+                          "time",
+                          "ap_posture")]
+    
+    # write data frame
+    write.table(vis_ap,
+                file = paste0("./3_data/processed/ap_clean/", id, "V", visit, ".csv"),
+                sep = ",",
+                row.names = F)
+  }
+}
+
+
+# testing daylight conversion -----------------------------------------------------
+on_off_log <- "visit_on_off_log.csv"
+
+# test1
+nsavings_test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv" #yes-no
+ysavings_test <- "1074V1-AP740064 9Nov10 12-00pm for 3h 29m-AOSD-CL08090134-Events.csv" #no-yes
+
+# test2
+nsavings_test <- "1052V1-AP740072 10Aug10 2-59pm for 5h 13m-AOSD-CL08090134-Events.csv" #yes-no
+ysavings_test <- "1052V3-AP740067 17Sep10 4-44pm for 4h 49m-AOSD-CL08090134-Events.csv" #yes-yes
+
+# test3
+nsavings_test <- "1085V1-AP740074 4Dec10 3-39pm for 3h 54m-AOSD-CL08090134-Events.csv" #no-yes
+ysavings_test <- "1115V2-AP740083 2Apr11 6-18pm for 3h 22m-AOSD-CL08090134-Events.csv" #yes-yes
+
+# test4
+nsavings_test <- "1100V2-AP740067 3Feb11 10-32am for 3h 39m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "4121V1-AP740081 21May11 11-36am for 4h 26m-AOSD-CL08090134-Events.csv" #y-n
+
+# test5
+nsavings_test <- "7101V1-AP740081 11Feb11 2-28pm for 5h 47m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "5114V1-AP740074 29Mar11 10-34am for 4h 44m-AOSD-CL08090134-Events.csv" #y-y
+
+# test6
+nsavings_test <- "1042V2-AP740063 4Jun10 10-21am for 6h 23m-AOSD-CL08090134-Events.csv"  #y-n
+ysavings_test <- "1068V2-AP740072 23Oct10 12-28pm for 4h 40m-AOSD-CL08090134-Events.csv" #y-y
+
+# test7
+nsavings_test <- "1087V3-AP740072 12Jan11 3-45pm for 3h 58m-AOSD-CL08090134-Events.csv"  #n-y
+ysavings_test <- "1042V3-AP740068 23Jul10 11-28am for 5h 41m-AOSD-CL08090134-Events.csv" #y-n
+
+# test8
+nsavings_test <- "1118V3-AP740065 26Apr11 10-45am for 3h 56m-AOSD-CL08090134-Events.csv" #y-y
+ysavings_test <- "3065V3-AP740072 6Oct10 10-52am for 4h 4m-AOSD-CL08090134-Events.csv"   #y-y
+
+# read in on off log and clean
+{
+log <- read.table(file = paste0("./3_data/raw/", on_off_log),
+                  header = T,
+                  sep = ",",
+                  stringsAsFactors = F)
+
+log$date_on <- paste(log$date_on_month,
+                     log$date_on_day,
+                     log$date_on_year,
+                     sep="/")
+log$time_on <- paste(log$time_on_hour,
+                     log$time_on_minute,
+                     log$time_on_seconds,
+                     sep=":")
+log$date_off <- paste(log$date_off_month,
+                      log$date_off_day,
+                      log$date_off_year,
+                      sep="/")
+log$time_off <- paste(log$time_off_hour,
+                      log$time_off_minute,
+                      log$time_off_seconds,
+                      sep=":")
+log$date_time_on <- paste(log$date_on,
+                          log$time_on,
+                          sep=" ")
+log$date_time_off <- paste(log$date_off,
+                           log$time_off,
+                           sep=" ")
+log$date_time_on <- strptime(log$date_time_on,
+                             "%m/%d/%Y %H:%M:%S")
+log$date_time_off <- strptime(log$date_time_off,
+                              "%m/%d/%Y %H:%M:%S")
+log$date_time_on <- force_tz(log$date_time_on,
+                             tz = "America/Chicago")
+log$date_time_off <- force_tz(log$date_time_off,
+                              tz = "America/Chicago")
+}
+
+########## no savings
+{
+nsav_ap <- read.table(file = paste0("./3_data/raw/events/", nsavings_test),
+                     header = T,
+                     sep = ",",
+                     stringsAsFactors = F)
+nsav_ap <- nsav_ap[,(1:6)]
+names(nsav_ap) <- c("time",
+                   "datacount",
+                   "interval",
+                   "activity",
+                   "cumulativesteps",
+                   "methrs")
+
+# Change from Julian time to GMT
+nsav_ap$time <- sub("#", "", nsav_ap$time)
+nsav_ap$time <- sub("#", "", nsav_ap$time)
+nsav_ap[,2] <- as.numeric(as.character(nsav_ap[,2]))
+nsav_ap[,3] <- as.numeric(as.character(nsav_ap[,3]))
+nsav_ap[,4] <- as.numeric(as.character(nsav_ap[,4]))
+nsav_ap[,5] <- as.numeric(as.character(nsav_ap[,5]))*2 #event files have half the actual number of steps for some reason
+nsav_ap[,6] <- as.numeric(as.character(nsav_ap[,6]))
+
+t <- dim(nsav_ap)[1]
+nsav_ap <- nsav_ap[!(nsav_ap[,"time"] == "1899-12-30"), ]
+nsav_ap <- nsav_ap[!(nsav_ap[,"time"] == "0"), ]
+n <- dim(nsav_ap)[1]		
+  
+nsav_ap$time <- as.numeric(nsav_ap$time)
+nsav_ap$time <- as.POSIXct(as.Date(nsav_ap$time,
+                                   origin = "1899-12-30"))
+nsav_ap$time <- as.POSIXlt(nsav_ap$time,
+                           tz = "UTC")
+
+# for some reason, converting to UTC actually makes it relevant time zone
+nsav_ap$time <- force_tz(nsav_ap$time,
+                         tz = "America/Chicago")
+nsav_ap$time <- strptime(nsav_ap$time,
+                         format = "%Y-%m-%d %H:%M:%S")
+nsav_ap$time <- nsav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
+}
+
+######### yes savings
+{
+ysav_ap <- read.table(file = paste0("./3_data/raw/events/", ysavings_test),
+                      header = T,
+                      sep = ",",
+                      stringsAsFactors = F)
+ysav_ap <- ysav_ap[,(1:6)]
+names(ysav_ap) <- c("time",
+                    "datacount",
+                    "interval",
+                    "activity",
+                    "cumulativesteps",
+                    "methrs")
+
+# Change from Julian time to GMT
+ysav_ap$time <- sub("#", "", ysav_ap$time)
+ysav_ap$time <- sub("#", "", ysav_ap$time)
+ysav_ap[,2] <- as.numeric(as.character(ysav_ap[,2]))
+ysav_ap[,3] <- as.numeric(as.character(ysav_ap[,3]))
+ysav_ap[,4] <- as.numeric(as.character(ysav_ap[,4]))
+ysav_ap[,5] <- as.numeric(as.character(ysav_ap[,5]))*2 #event files have half the actual number of steps for some reason
+ysav_ap[,6] <- as.numeric(as.character(ysav_ap[,6]))
+
+t <- dim(ysav_ap)[1]
+ysav_ap <- ysav_ap[!(ysav_ap[,"time"] == "1899-12-30"), ]
+ysav_ap <- ysav_ap[!(ysav_ap[,"time"] == "0"), ]
+n <- dim(ysav_ap)[1]		
+  
+ysav_ap$time <- as.numeric(ysav_ap$time)
+ysav_ap$time <- as.POSIXct(as.Date(ysav_ap$time,
+                                   origin = "1899-12-30"))
+ysav_ap$time <- as.POSIXlt(ysav_ap$time,
+                           tz = "UTC")
+
+# for some reason, converting to UTC actually makes it relevant time zone
+ysav_ap$time <- force_tz(ysav_ap$time,
+                         tz = "America/Chicago")
+ysav_ap$time <- strptime(ysav_ap$time,
+                         format = "%Y-%m-%d %H:%M:%S")
+ysav_ap$time <- ysav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
+}
 
 # other -------------------------------------------------------------------
 
+# checks
+inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
+i <- length(inds_worn)
+if(i == 0) {
+  
+  sbs_ap$off <- "AP and on.off.log do not match"
+  
+}
+
+sbs_ap$ap.posture <- 
+  as.character(sbs_ap$ap.posture) #change to character for next step
+sbs_ap$ap.posture[sbs_ap$ap.posture == "0"] <- "posture;0006 sitting" 
+sbs_ap$ap.posture[sbs_ap$ap.posture == "1"] <- "posture;0007 standing" 
+sbs_ap$ap.posture[sbs_ap$ap.posture == "2"] <- "posture;0008 movement"
 
 #### testing merge function
 test = "FLAC_1042V2_POSTURE_CHANG.CSV"
@@ -913,3 +2000,19 @@ counter <- counter+1
 
 # maybe for later??
 on_off_log$hours_on <- as.vector(difftime(strptime(on_off_log$date_time_off,format="%Y-%m-%d %H:%M:%S"),strptime(on_off_log$date_time_on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
+
+
+# Use for Noldus??? -------------------------------------------------------
+
+#second by second from process_ap code
+time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      strptime(raw_ap$time[seq_len(n - 1)],
+                                               format="%Y-%m-%d %H:%M:%S"),
+                                      units = "secs"))
+time_each_event <- c(time_each_event,
+                     round(raw_ap[n,"interval"],
+                           0))
+time_each_event[is.na(time_each_event) == T] <- 1
+
+

@@ -1,45 +1,23 @@
 source("./2_scripts/2_functions.R")
 
-
 # image Cleaning ----------------------------------------------------------
-
-# Second by Second Function
 
 anno_list <- toupper(list.files("./3_data/raw/annotation", ".csv"))
 corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
-log <- "visit_on_off_log.csv"
 
 process_anno(anno_file_list = anno_list,
-             corr_timstamps_path = corr_timestamps,
-             on_off_log = log)
+             corr_timstamps_path = corr_timestamps)
 
 warnings()
 
 # check files under "check folder to see if Stopwatch matches up with 1 "NEWStartTime" timestamp
 
-# on and off function #
-
-filelist2 = list.files("./data/image", ".CSV")
-for (i in 1:length(filelist2)) {
-  image.on.off(i)
-}
-
 
 # activpal cleaning -------------------------------------------------------
 
-### NO CORRECTION ###
+ap_list = list.files("./3_data/raw/events", ".csv")
 
-aplist = list.files("./raw/analysis", ".csv")
-for (i in 1:length(aplist)) { 
-  ap.no.correction(i) 
-}
-
-### WITH CORRECTION ###
-
-aplist2 = list.files("./raw/analysis_correction", ".csv")
-for (i in 1:length(aplist2)){
-  ap.with.correction(i)
-}
+process_ap(ap_file_list = ap_list)
 
 
 # errors ------------------------------------------------------------------
