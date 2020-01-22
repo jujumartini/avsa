@@ -57,7 +57,8 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
     # check#1: See if timestamp was entered
     if (dim(mer_anno)[1] == 0) {
       
-      message("Error: Annotation does not have an entry in Timestamps.csv")
+      warning(paste(substr(anno_file_list[i], 6, 11), "annotation file does not have an entry in Timestamps.csv",
+                    sep = " "))
       
     } else {
     
@@ -115,7 +116,8 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
       i <- length(inds_worn)
       if(i == 0) {
         
-        message("Error: Stopwatch Timestamp or on-off entry is incorrect")
+        warning(paste(substr(anno_file_list[i], 6, 11), "timestamp or on_off_log entry incorrect",
+                      sep = " "))
         
       } else {
         
@@ -203,7 +205,8 @@ process_ap <- function(ap_file_list) {
     
     if (dim(on_off)[1] == 0) {
       
-      message("Error: Subject/Visit not in on_off_log")
+      warning(paste(substr(ap_file_list[i], 1, 6), "not in on_off_log",
+                    sep = " "))
       
     } else {
       
@@ -336,7 +339,8 @@ process_ap <- function(ap_file_list) {
       i <- length(inds_worn)
       if(i == 0) {
         
-        message("Error: AP and on_off do not match")
+        warning(paste(substr(ap_file_list[i], 1, 6), "ap file and on_off entry do not match",
+                      sep = " "))
         
       } else {
         
