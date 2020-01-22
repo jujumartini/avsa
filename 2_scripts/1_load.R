@@ -16,4 +16,3 @@ tidyverse_conflicts()
 # check working directory. If not using an Rproject, use the here function 
 # before each path
 here()
-
