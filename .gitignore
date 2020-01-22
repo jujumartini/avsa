@@ -2,4 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
+/0_literature/*
+/1_deliverables/*
 /3_data/*
+/4_results/*
+/5_figures/*
