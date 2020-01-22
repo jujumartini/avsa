@@ -1868,6 +1868,22 @@ write_csv(vis_merged,
           path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
 
 
+# merge_anno_ap - Test 2 --------------------------------------------------
+# test with 1013v2 since it had problems in the past
+test <- "1013V2.csv"
+
+print(test)
+
+vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", test),
+                     col_names = T)
+id_visit <- substr(test, 1, 6)
+vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
+                   col_names = T)
+vis_merged <- inner_join(vis_anno, vis_ap)
+write_csv(vis_merged,
+          path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+
+
 
 # other -------------------------------------------------------------------
 
