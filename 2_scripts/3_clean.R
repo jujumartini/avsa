@@ -55,12 +55,9 @@ write.csv(image.frame, file = paste0("./data/image",
 
 # merging -----------------------------------------------------------------
 
-filelist3 = list.files("./data/image", ".CSV")
-for (i in 1:length(filelist3)) {
-  merging.files(i)
-}
+anno_clean_list = list.files("./3_data/processed/anno_clean/")
 
-warnings()
+merge_anno_ap(list_anno = anno_clean_list)
 
 
 # analysis ----------------------------------------------------------------
