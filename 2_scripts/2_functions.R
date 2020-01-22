@@ -252,7 +252,6 @@ process_ap <- function(ap_file_list, on_off_log) {
     raw_ap <- raw_ap[!(raw_ap[,"time"] == "1899-12-30"), ]
     raw_ap <- raw_ap[!(raw_ap[,"time"] == "0"), ]
     n <- dim(raw_ap)[1]		
-    class(raw_ap$time)
     
     if(is.character(raw_ap$time) == T & t == n) {
       
@@ -262,7 +261,7 @@ process_ap <- function(ap_file_list, on_off_log) {
       raw_ap$time <- as.POSIXlt(raw_ap$time,
                                 tz = "UTC")
       
-      # for some reason, converting to UTC actually makes it relevant time zone but w/o daylight savings
+      # for some reason, converting to UTC actually makes it relevant time zone
       raw_ap$time <- force_tz(raw_ap$time,
                               tz = "America/Chicago")
       raw_ap$time <- strptime(raw_ap$time,
@@ -274,7 +273,6 @@ process_ap <- function(ap_file_list, on_off_log) {
     id <- substr(ap_file_list[i], 1, 4)
     visit <- substr(ap_file_list[i], 6, 6)
     on_off <- log[log$ID == id & log$Visit == visit, ]
-    dim(on_off)[1]
     date_time_visit <- on_off$date_time_on
     date_time_file <- raw_ap$time[1]
     
@@ -293,19 +291,6 @@ process_ap <- function(ap_file_list, on_off_log) {
     }
     
     # daylight savings
-    x <- ymd_hms("2010-11-06, 10:00:00") %>% 
-      strptime(.,
-               format = "%Y-%m-%d %H:%M:%S")
-    dst(x)
-    dst(date_time_file)
-    dst(date_time_visit)
-    
-    isTRUE(dst(date_time_file))
-    isFALSE(dst(date_time_file))
-    
-    isTRUE(dst(date_time_visit))
-    isFALSE(dst(date_time_visit))
-    
     if (all(isFALSE(dst(date_time_file)), 
             isTRUE(dst(date_time_visit)))) {
       
@@ -338,6 +323,7 @@ process_ap <- function(ap_file_list, on_off_log) {
                   time_each_event)
     acts <- rep(raw_ap$activity,
                 time_each_event)
+    
     l <- length(acts)
     ap_start <- strptime(raw_ap$time[1],
                          format="%Y-%m-%d %H:%M:%S")
