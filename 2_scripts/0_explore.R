@@ -1876,16 +1876,37 @@ print(test)
 
 vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", test),
                      col_names = T)
+l <- nrow(vis_anno)
 id_visit <- substr(test, 1, 6)
 vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
                    col_names = T)
-vis_merged <- inner_join(vis_anno, vis_ap)
-write_csv(vis_merged,
-          path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+vis_merged <- inner_join(vis_anno,
+                         vis_ap,
+                         by = c("ID", "Visit", "time"))
+n <- nrow(vis_merged)
+
+# Check #1
+if (l == n) {
+  
+  vis_merged <- vis_merged[, -3]
+  write_csv(vis_merged,
+            path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+  
+} else {
+  
+  warning(paste(id_visit, "annotation and AP file do not match in time",
+                sep = " "))
+  
+}
+
+
+
 
 
 
 # other -------------------------------------------------------------------
+
+
 
 # checks
 inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
