@@ -1,4 +1,4 @@
-process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
+process_anno <- function(anno_file_list, corr_timstamps_path) {
   
   # read in timestamps csv and change to times
   corr_times <- read.csv(file = corr_timstamps_path)
@@ -13,43 +13,6 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
                                 difftime(StopWatch_YMD_HMS,
                                          Corr_Picture_YMD_HMS,
                                          units = "secs"))
-  
-  # read in on off log and clean
-  log <- read.table(file = paste0("./3_data/raw/", on_off_log),
-                    header = T,
-                    sep = ",",
-                    stringsAsFactors = F)
-  
-  log$date_on <- paste(log$date_on_month,
-                       log$date_on_day,
-                       log$date_on_year,
-                       sep="/")
-  log$time_on <- paste(log$time_on_hour,
-                       log$time_on_minute,
-                       log$time_on_seconds,
-                       sep=":")
-  log$date_off <- paste(log$date_off_month,
-                        log$date_off_day,
-                        log$date_off_year,
-                        sep="/")
-  log$time_off <- paste(log$time_off_hour,
-                        log$time_off_minute,
-                        log$time_off_seconds,
-                        sep=":")
-  log$date_time_on <- paste(log$date_on,
-                            log$time_on,
-                            sep=" ")
-  log$date_time_off <- paste(log$date_off,
-                             log$time_off,
-                             sep=" ")
-  log$date_time_on <- strptime(log$date_time_on,
-                               "%m/%d/%Y %H:%M:%S")
-  log$date_time_off <- strptime(log$date_time_off,
-                                "%m/%d/%Y %H:%M:%S")
-  log$date_time_on <- force_tz(log$date_time_on,
-                               tz = "America/Chicago")
-  log$date_time_off <- force_tz(log$date_time_off,
-                                tz = "America/Chicago")
   
   # sbs function for code times
   sbs <- function(i) {
@@ -118,7 +81,7 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
       
       # write a "check" csv file to see if stopwatch matches NEW start time
       write.table(mer_anno,
-                  file = paste0("./3_data/processed/anno_check/", file_name),
+                  file = paste0("./3_data/processed/anno_check/",id, "V", visit, ".csv"),
                   sep = ",",
                   row.names = F)
       
@@ -136,7 +99,7 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
       sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
       
       # on off times
-      on_off <- log[log$ID == id & log$Visit == visit, ]
+      on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
       on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
       off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
       
@@ -174,7 +137,7 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
         
         # write table
         write.table(vis_anno,
-                    file = paste0("./3_data/processed/anno_clean/", id, "v", visit, ".csv"),
+                    file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
                     sep = ",",
                     row.names = F)
       }
@@ -182,44 +145,7 @@ process_anno <- function(anno_file_list, corr_timstamps_path, on_off_log) {
   }
 }
 
-process_ap <- function(ap_file_list, on_off_log) {
-  
-  # read in on off log and clean
-  log <- read.table(file = paste0("./3_data/raw/", on_off_log),
-                    header = T,
-                    sep = ",",
-                    stringsAsFactors = F)
-  
-  log$date_on <- paste(log$date_on_month,
-                       log$date_on_day,
-                       log$date_on_year,
-                       sep="/")
-  log$time_on <- paste(log$time_on_hour,
-                       log$time_on_minute,
-                       log$time_on_seconds,
-                       sep=":")
-  log$date_off <- paste(log$date_off_month,
-                        log$date_off_day,
-                        log$date_off_year,
-                        sep="/")
-  log$time_off <- paste(log$time_off_hour,
-                        log$time_off_minute,
-                        log$time_off_seconds,
-                        sep=":")
-  log$date_time_on <- paste(log$date_on,
-                            log$time_on,
-                            sep=" ")
-  log$date_time_off <- paste(log$date_off,
-                             log$time_off,
-                             sep=" ")
-  log$date_time_on <- strptime(log$date_time_on,
-                               "%m/%d/%Y %H:%M:%S")
-  log$date_time_off <- strptime(log$date_time_off,
-                                "%m/%d/%Y %H:%M:%S")
-  log$date_time_on <- force_tz(log$date_time_on,
-                               tz = "America/Chicago")
-  log$date_time_off <- force_tz(log$date_time_off,
-                                tz = "America/Chicago")
+process_ap <- function(ap_file_list) {
   
   # create clean ap files
   for (i in seq_along(ap_file_list)) {
@@ -271,7 +197,7 @@ process_ap <- function(ap_file_list, on_off_log) {
     # check#1: See if ap file is in log +correction factor + dst offset
     id <- substr(ap_file_list[i], 1, 4)
     visit <- substr(ap_file_list[i], 6, 6)
-    on_off <- log[log$ID == id & log$Visit == visit, ]
+    on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
     date_time_visit <- on_off$date_time_on
     date_time_file <- raw_ap$time[1]
     

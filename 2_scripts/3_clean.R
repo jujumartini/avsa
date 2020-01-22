@@ -4,11 +4,9 @@ source("./2_scripts/2_functions.R")
 
 anno_list <- toupper(list.files("./3_data/raw/annotation", ".csv"))
 corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
-log <- "visit_on_off_log.csv"
 
 process_anno(anno_file_list = anno_list,
-             corr_timstamps_path = corr_timestamps,
-             on_off_log = log)
+             corr_timstamps_path = corr_timestamps)
 
 warnings()
 
@@ -18,10 +16,8 @@ warnings()
 # activpal cleaning -------------------------------------------------------
 
 ap_list = list.files("./3_data/raw/events", ".csv")
-log <- "visit_on_off_log.csv"
 
-process_ap(ap_file_list = ap_list,
-           on_off_log = log)
+process_ap(ap_file_list = ap_list)
 
 
 # errors ------------------------------------------------------------------
