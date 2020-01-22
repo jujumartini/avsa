@@ -1068,7 +1068,7 @@ if(i == 0) {
 # test with ap file after 11/2018, y-n dst
 on_off_log <- "visit_on_off_log.csv"
 
-test <- "1087V2-AP740077 15Dec10 3-39pm for 3h 58m-AOSD-CL08090134-Events.csv"
+test <- "1053V1-AP740068 12Aug10 11-03am for 4h 43m-AOSD-CL08090134-Events.csv"
 
 # read in on off log and clean
 log <- read.table(file = paste0("./3_data/raw/", on_off_log),
@@ -1163,20 +1163,14 @@ if (dim(on_off)[1] == 0) {
   
   message("Subject/Visit not in on_off_log")
   
-} else {
+} else if (date_time_visit > as.Date("2018-11-01")) { # correction factor for ap files after 11/01/2018
+    
+  ### CORRECTION FACTOR ###
+  raw_ap$time <- raw_ap$time + 3106.8918*24*60*60
   
-  # correction factor for ap files after 11/01/2018
-  on_off$date_time_on > as.Date("2018-11-01")
+  ### after testing all files were at least 6 sec off ###
+  raw_ap$time <- raw_ap$time + 6 
   
-  if (date_time_visit > as.Date("2018-11-01")) {
-    
-    ### CORRECTION FACTOR ###
-    raw_ap$time <- raw_ap$time + 3106.8918*24*60*60
-    
-    ### after testing all files were at least 6 sec off ###
-    raw_ap$time <- raw_ap$time + 6 
-    
-  }
 }
 
 # daylight savings
