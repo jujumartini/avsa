@@ -1852,6 +1852,23 @@ ysav_ap$time <- strptime(ysav_ap$time,
 ysav_ap$time <- ysav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
 }
 
+
+# merge_anno_ap - Test 1 --------------------------------------------------
+test <- "1002V3.csv"
+
+print(test)
+
+vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", test),
+                     col_names = T)
+id_visit <- substr(test, 1, 6)
+vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
+                   col_names = T)
+vis_merged <- inner_join(vis_anno, vis_ap)
+write_csv(vis_merged,
+          path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+
+
+
 # other -------------------------------------------------------------------
 
 # checks
