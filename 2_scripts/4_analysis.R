@@ -8,11 +8,169 @@ list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
 analysis_avsa(merged_list = list_merged)
 
 
+# means and sd ------------------------------------------------------------
+data_time <- read_csv(file = "./3_data/analysis/table_analysis_time.csv")
+data_percentage <- read_csv(file = "./3_data/analysis/table_analysis_percentage.csv")
+
+# changing NaN to 0
+data_percentage$move_agree[is.nan(data_percentage$move_agree)] <- 0
+data_percentage$move_mis_sit[is.nan(data_percentage$move_mis_sit)] <- 0
+data_percentage$move_mis_stand[is.nan(data_percentage$move_mis_stand)] <- 0
+
+# means and sd
+colSd <- function(x, na.rm = T) {
+  
+  if (na.rm) {
+    
+    n <- colSums(!is.na(x))
+    
+  } else {
+    
+    n <- nrow(x)
+    
+  }
+  
+  colVar <- colMeans(x*x, na.rm = na.rm) - (colMeans(x, na.rm = na.rm))^2
+  
+  return(sqrt(colVar * n/(n-1)))
+  
+}
+
+avg_times <- colMeans(data_time)
+avg_times
+sd_times <- colSd(data_time)
+
+avg_percs <- colMeans(data_percentage)
+sd_percs <- colSd(data_percentage)
+
+# get the length of all possible names to make other vectors same length
+n <- length(union(names(avg_times), names(avg_percs)))
+
+length(avg_times) <- n
+length(sd_times) <- n
+length(avg_percs) <- n
+length(sd_percs) <- n
+
+# reorder times and perc vectors into correct position where you want the names in one to fill the spots of the other
+names(avg_times)
+avg_times <- avg_times[c("ID",
+                         "Visit",
+                         "visit_time",
+                         "event_time",
+                         "",
+                         "trans_time",
+                         "",
+                         "",
+                         "",
+                         "sit_ap",
+                         "sit_anno",
+                         "stand_ap",
+                         "stand_anno",
+                         "move_ap",
+                         "move_anno",
+                         "sit_agree",
+                         "stand_agree",
+                         "move_agree",
+                         "sit_mis_stand", 
+                         "sit_mis_move",
+                         "stand_mis_sit",
+                         "stand_mis_move",
+                         "move_mis_sit",
+                         "move_mis_stand")]
+
+sd_times <- sd_times[c("ID",
+                       "Visit",
+                       "visit_time",
+                       "event_time",
+                       "",
+                       "trans_time",
+                       "",
+                       "",
+                       "",
+                       "sit_ap",
+                       "sit_anno",
+                       "stand_ap",
+                       "stand_anno",
+                       "move_ap",
+                       "move_anno",
+                       "sit_agree",
+                       "stand_agree",
+                       "move_agree",
+                       "sit_mis_stand", 
+                       "sit_mis_move",
+                       "stand_mis_sit",
+                       "stand_mis_move",
+                       "move_mis_sit",
+                       "move_mis_stand")]
+
+names(avg_percs)
+avg_percs <- avg_percs[c("ID",
+                         "Visit",
+                         "",
+                         "",
+                         "perc_event",
+                         "",
+                         "perc_trans",
+                         "total_agree",
+                         "event_agree",
+                         "sit_ap",
+                         "sit_anno",
+                         "stand_ap",
+                         "stand_anno",
+                         "move_ap",
+                         "move_anno",
+                         "sit_agree",
+                         "stand_agree",
+                         "move_agree",
+                         "sit_mis_stand", 
+                         "sit_mis_move",
+                         "stand_mis_sit",
+                         "stand_mis_move",
+                         "move_mis_sit",
+                         "move_mis_stand")]
+
+sd_percs <- sd_percs[c("ID",
+                       "Visit",
+                       "",
+                       "",
+                       "perc_event",
+                       "",
+                       "perc_trans",
+                       "total_agree",
+                       "event_agree",
+                       "sit_ap",
+                       "sit_anno",
+                       "stand_ap",
+                       "stand_anno",
+                       "move_ap",
+                       "move_anno",
+                       "sit_agree",
+                       "stand_agree",
+                       "move_agree",
+                       "sit_mis_stand", 
+                       "sit_mis_move",
+                       "stand_mis_sit",
+                       "stand_mis_move",
+                       "move_mis_sit",
+                       "move_mis_stand")]
+
+# combine the name vectors and reassign them
+bind_names <- coalesce(names(avg_times), names(avg_percs))
+
+names(avg_times) <- bind_names
+names(sd_times) <- bind_names
+names(avg_percs) <- bind_names
+names(sd_percs) <- bind_names
+
+rbind(avg_times,
+      sd_times,
+      avg_percs,
+      sd_percs)
+
 # linear mixed effects model - bias and CI --------------------------------
 
 
 
-data <- read.csv("R:/PAHRL/Student Access/0_Students/MARTINEZ/AvsA Paper/R Data/posture_mins_table.csv")
 
 
 # fit models: bias~b0 + b_i + e_ij
