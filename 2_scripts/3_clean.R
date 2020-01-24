@@ -1,11 +1,11 @@
-source("./2_scripts/2_functions.R")
+source("./2_scripts/1_functions.R")
 
 # image Cleaning ----------------------------------------------------------
 
-anno_list <- toupper(list.files("./3_data/raw/annotation", ".csv"))
+list_anno <- toupper(list.files("./3_data/raw/annotation", ".csv"))
 corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
 
-process_anno(anno_file_list = anno_list,
+process_anno(anno_file_list = list_anno,
              corr_timstamps_path = corr_timestamps)
 warnings()
 
@@ -14,17 +14,17 @@ warnings()
 
 # activpal cleaning -------------------------------------------------------
 
-ap_list = list.files("./3_data/raw/events", ".csv")
+list_ap <- list.files("./3_data/raw/events", ".csv")
 
-process_ap(ap_file_list = ap_list)
+process_ap(ap_file_list = list_ap)
 warnings()
 
 
 # merging -----------------------------------------------------------------
 
-anno_clean_list = list.files("./3_data/processed/anno_clean/")
+list_anno_clean <- list.files("./3_data/processed/anno_clean/")
 
-merge_anno_ap(list_anno = anno_clean_list)
+merge_anno_ap(list_anno = list_anno_clean)
 warnings()
 
 

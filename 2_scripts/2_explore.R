@@ -1901,11 +1901,921 @@ if (l == n) {
 
 
 
+# analysis_avsa - Test 1 ---------------------------------------------------
+test <- "1002V3.csv"
+
+counter <- 1
+
+# loop starts
+
+print(test)
+
+data_merged <- read_csv(file = paste0("./3_data/analysis/merged_anno_ap/",test),
+                        col_names = T)
+data_event <- data_merged[data_merged$annotation != 3, ]
+
+# maybe???
+write_csv(data_event,
+          path = paste0("./3_data/analysis/event/", test, "_event.csv"),
+          col_names = T)
+
+# future tests
+events.1sec$annotation <- as.factor(events.1sec$annotation)
+events.1sec$ap.posture <- as.factor((events.1sec$ap.posture))
+anno.levels <- levels(events.1sec$annotation)
+l <- length(anno.levels)
+ap.levels <- levels(events.1sec$ap.posture)
+n <- length(ap.levels)
+
+if (l==1){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels[length(anno.levels) + 1] <- "2"
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (l==2){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels <- sort(anno.levels)
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (n==1){
+  ap.levels[length(ap.levels) + 1] <- "1"
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+if (n==2){
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+
+# times: visit, event, transition (all converted to minutes)
+time_visit <- nrow(data_merged) %>% #
+  as.integer()
+time_visit <- time_visit/60
+
+time_event <- data_merged[data_merged$annotation != 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_event <- time_event/60
+
+time_trans <- data_merged[data_merged$annotation == 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_trans <- time_trans/60
+
+# check to see event and transition equal data_merged. dont include in function
+time_event + time_trans == nrow(data_merged)/60
+
+# times: posture, agree & misclassification from confusion matrix
+time_matr_event <- table(data_event$ap_posture, data_event$annotation) # rows = ap
+time_matr_event <- addmargins(time_matr_event)
+time_matr_event <- time_matr_event/60 
+time_matr_event
+
+time_ap_sit <- time_matr_event[1, 4] # posture times
+time_ap_sta <- time_matr_event[2, 4]
+time_ap_mov <- time_matr_event[3, 4]
+
+time_anno_sit <- time_matr_event[4, 1]
+time_anno_sta <- time_matr_event[4, 2]
+time_anno_mov <- time_matr_event[4, 3]
+
+time_agre_ss <- time_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+time_miss_st <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
+time_miss_sm <- time_matr_event[1, 3] # "anno misclassified ap sitting as movement"
+
+time_miss_ts <- time_matr_event[2, 1]
+time_agre_tt <- time_matr_event[2, 2] # "anno agrees with ap standing"
+time_miss_tm <- time_matr_event[2, 3]
+
+time_miss_ms <- time_matr_event[3, 1]
+time_miss_mt <- time_matr_event[3, 2]
+time_agre_mm <- time_matr_event[3, 3]
+
+time_agre_total <- time_agre_ss + time_agre_tt + time_agre_mm 
+
+# check
+sum(data_merged$annotation == data_merged$ap_posture) # TRUE = agree, adds all sec they agree
+time_agre_total == sum(data_merged$annotation == data_merged$ap_posture)/60
+
+# time table
+id <- data_merged$ID[1]
+visit <- data_merged$Visit[1]
+
+table_analysis_time <- data.frame(ID             = id,
+                                  Visit          = visit,
+                                  visit_time     = time_visit,
+                                  event_time     = time_event,
+                                  trans_time     = time_trans,
+                                  sit_ap         = time_ap_sit,
+                                  sit_anno       = time_anno_sit,
+                                  stand_ap       = time_ap_sta,
+                                  stand_anno     = time_anno_sta,
+                                  move_ap        = time_ap_mov,
+                                  move_anno      = time_anno_mov,
+                                  sit_agree      = time_agre_ss,
+                                  stand_agree    = time_agre_tt,
+                                  move_agree     = time_agre_mm,
+                                  sit_mis_stand  = time_miss_st,
+                                  sit_mis_move   = time_miss_sm,
+                                  stand_mis_sit  = time_miss_ts,
+                                  stand_mis_move = time_miss_tm,
+                                  move_mis_sit   = time_miss_ms,
+                                  move_mis_stand = time_miss_mt)
+
+
+# percentages: event, transition, total agreement and event agreement
+perc_event <- time_event/time_visit*100 #
+perc_trans <- time_trans/time_visit*100
+perc_agre_total <-  time_agre_total/time_visit*100 #
+perc_agre_event <-  time_agre_total/time_event*100 #
+
+# percentages: agree and misclassification by ap posture from confusion matrix
+perc_sit_row <- time_matr_event[1, ]/time_ap_sit # dividing by ap posture times, are = to
+perc_sta_row <- time_matr_event[2, ]/time_ap_sta
+perc_mov_row <- time_matr_event[3, ]/time_ap_mov
+
+perc_matr_event <- rbind(perc_sit_row, perc_sta_row, perc_mov_row)
+perc_matr_event <- perc_matr_event*100
+perc_matr_event
+
+perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+perc_ap_sta <- time_ap_sta/time_event*100
+perc_ap_mov <- time_ap_mov/time_event*100
+perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+
+perc_anno_sit <- time_anno_sit/time_event*100
+perc_anno_sta <- time_anno_sta/time_event*100
+perc_anno_mov <- time_anno_mov/time_event*100
+perc_anno_sit + perc_anno_sta + perc_anno_mov == 100
+
+perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+perc_miss_st <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+perc_miss_sm <- perc_matr_event[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+
+perc_miss_ts <- perc_matr_event[2, 1]
+perc_agre_tt <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+perc_miss_tm <- perc_matr_event[2, 3]
+
+perc_miss_ms <- perc_matr_event[3, 1]
+perc_miss_mt <- perc_matr_event[3, 2]
+perc_agre_mm <- perc_matr_event[3, 3]
+
+# percentage table
+table_analysis_percentage <- data.frame(ID             = id,
+                                        Visit          = visit,
+                                        perc_event     = perc_event,
+                                        perc_trans     = perc_trans,
+                                        sit_ap         = perc_ap_sit,
+                                        sit_anno       = perc_anno_sit,
+                                        stand_ap       = perc_ap_sta,
+                                        stand_anno     = perc_anno_sta,
+                                        move_ap        = perc_ap_mov,
+                                        move_anno      = perc_anno_mov,
+                                        total_agree    = perc_agre_total,
+                                        event_agree    = perc_agre_event,
+                                        sit_agree      = perc_agre_ss,
+                                        stand_agree    = perc_agre_tt,
+                                        move_agree     = perc_agre_mm,
+                                        sit_mis_stand  = perc_miss_st,
+                                        sit_mis_move   = perc_miss_sm,
+                                        stand_mis_sit  = perc_miss_ts,
+                                        stand_mis_move = perc_miss_tm,
+                                        move_mis_sit   = perc_miss_ms,
+                                        move_mis_stand = perc_miss_mt)
+
+
+
+if (counter == 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = T,
+            append = F)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = T,
+            append = F)
+  
+}
+
+if (counter > 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = T,
+            append = T)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = T,
+            append = T)
+  
+}
+
+counter <- counter+1
+
+
+
+# analysis_avsa - Test 2 --------------------------------------------------
+# testing appending to already made analysis tables
+test <- "1009V1.csv"
+
+# made counter 2 to add to already created table from test 1
+counter <- 2
+
+# loop starts
+
+print(test)
+
+data_merged <- read_csv(file = paste0("./3_data/analysis/merged_anno_ap/",test),
+                        col_names = T)
+data_event <- data_merged[data_merged$annotation != 3, ]
+
+# maybe???
+write_csv(data_event,
+          path = paste0("./3_data/analysis/event/", test, "_event.csv"),
+          col_names = T)
+
+# future tests
+events.1sec$annotation <- as.factor(events.1sec$annotation)
+events.1sec$ap.posture <- as.factor((events.1sec$ap.posture))
+anno.levels <- levels(events.1sec$annotation)
+l <- length(anno.levels)
+ap.levels <- levels(events.1sec$ap.posture)
+n <- length(ap.levels)
+
+if (l==1){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels[length(anno.levels) + 1] <- "2"
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (l==2){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels <- sort(anno.levels)
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (n==1){
+  ap.levels[length(ap.levels) + 1] <- "1"
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+if (n==2){
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+
+# times: visit, event, transition (all converted to minutes)
+time_visit <- nrow(data_merged) %>% #
+  as.integer()
+time_visit <- time_visit/60
+
+time_event <- data_merged[data_merged$annotation != 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_event <- time_event/60
+
+time_trans <- data_merged[data_merged$annotation == 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_trans <- time_trans/60
+
+# check to see event and transition equal data_merged. dont include in function
+time_event + time_trans == nrow(data_merged)/60
+
+# times: posture, agree & misclassification from confusion matrix
+time_matr_event <- table(data_event$ap_posture, data_event$annotation) # rows = ap
+time_matr_event <- addmargins(time_matr_event)
+time_matr_event <- time_matr_event/60 
+time_matr_event
+
+time_ap_sit <- time_matr_event[1, 4] # posture times
+time_ap_sta <- time_matr_event[2, 4]
+time_ap_mov <- time_matr_event[3, 4]
+
+time_anno_sit <- time_matr_event[4, 1]
+time_anno_sta <- time_matr_event[4, 2]
+time_anno_mov <- time_matr_event[4, 3]
+
+time_agre_ss <- time_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+time_miss_st <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
+time_miss_sm <- time_matr_event[1, 3] # "anno misclassified ap sitting as movement"
+
+time_miss_ts <- time_matr_event[2, 1]
+time_agre_tt <- time_matr_event[2, 2] # "anno agrees with ap standing"
+time_miss_tm <- time_matr_event[2, 3]
+
+time_miss_ms <- time_matr_event[3, 1]
+time_miss_mt <- time_matr_event[3, 2]
+time_agre_mm <- time_matr_event[3, 3]
+
+time_agre_total <- time_agre_ss + time_agre_tt + time_agre_mm 
+
+# check
+sum(data_merged$annotation == data_merged$ap_posture)/60 # TRUE = agree, adds all sec they agree
+time_agre_total == sum(data_merged$annotation == data_merged$ap_posture)/60
+
+# time table
+id <- data_merged$ID[1]
+visit <- data_merged$Visit[1]
+
+table_analysis_time <- data.frame(ID             = id,
+                                  Visit          = visit,
+                                  visit_time     = time_visit,
+                                  event_time     = time_event,
+                                  trans_time     = time_trans,
+                                  sit_ap         = time_ap_sit,
+                                  sit_anno       = time_anno_sit,
+                                  stand_ap       = time_ap_sta,
+                                  stand_anno     = time_anno_sta,
+                                  move_ap        = time_ap_mov,
+                                  move_anno      = time_anno_mov,
+                                  sit_agree      = time_agre_ss,
+                                  stand_agree    = time_agre_tt,
+                                  move_agree     = time_agre_mm,
+                                  sit_mis_stand  = time_miss_st,
+                                  sit_mis_move   = time_miss_sm,
+                                  stand_mis_sit  = time_miss_ts,
+                                  stand_mis_move = time_miss_tm,
+                                  move_mis_sit   = time_miss_ms,
+                                  move_mis_stand = time_miss_mt)
+
+
+# percentages: event, transition, total agreement and event agreement
+perc_event <- time_event/time_visit*100 #
+perc_trans <- time_trans/time_visit*100
+perc_agre_total <-  time_agre_total/time_visit*100 #
+perc_agre_event <-  time_agre_total/time_event*100 #
+
+# percentages: agree and misclassification by ap posture from confusion matrix
+perc_sit_row <- time_matr_event[1, ]/time_ap_sit # dividing by ap posture times, are = to
+perc_sta_row <- time_matr_event[2, ]/time_ap_sta
+perc_mov_row <- time_matr_event[3, ]/time_ap_mov
+
+perc_matr_event <- rbind(perc_sit_row, perc_sta_row, perc_mov_row)
+perc_matr_event <- perc_matr_event*100
+perc_matr_event
+
+perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+perc_ap_sta <- time_ap_sta/time_event*100
+perc_ap_mov <- time_ap_mov/time_event*100
+perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+
+perc_anno_sit <- time_anno_sit/time_event*100
+perc_anno_sta <- time_anno_sta/time_event*100
+perc_anno_mov <- time_anno_mov/time_event*100
+perc_anno_sit + perc_anno_sta + perc_anno_mov == 100
+
+perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+perc_miss_st <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+perc_miss_sm <- perc_matr_event[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+
+perc_miss_ts <- perc_matr_event[2, 1]
+perc_agre_tt <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+perc_miss_tm <- perc_matr_event[2, 3]
+
+perc_miss_ms <- perc_matr_event[3, 1]
+perc_miss_mt <- perc_matr_event[3, 2]
+perc_agre_mm <- perc_matr_event[3, 3]
+
+# percentage table
+table_analysis_percentage <- data.frame(ID             = id,
+                                        Visit          = visit,
+                                        perc_event     = perc_event,
+                                        perc_trans     = perc_trans,
+                                        sit_ap         = perc_ap_sit,
+                                        sit_anno       = perc_anno_sit,
+                                        stand_ap       = perc_ap_sta,
+                                        stand_anno     = perc_anno_sta,
+                                        move_ap        = perc_ap_mov,
+                                        move_anno      = perc_anno_mov,
+                                        total_agree    = perc_agre_total,
+                                        event_agree    = perc_agre_event,
+                                        sit_agree      = perc_agre_ss,
+                                        stand_agree    = perc_agre_tt,
+                                        move_agree     = perc_agre_mm,
+                                        sit_mis_stand  = perc_miss_st,
+                                        sit_mis_move   = perc_miss_sm,
+                                        stand_mis_sit  = perc_miss_ts,
+                                        stand_mis_move = perc_miss_tm,
+                                        move_mis_sit   = perc_miss_ms,
+                                        move_mis_stand = perc_miss_mt)
+
+
+
+if (counter == 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = T,
+            append = F)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = T,
+            append = F)
+  
+}
+
+if (counter > 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = F,
+            append = T)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = F,
+            append = T)
+  
+}
+
+counter <- counter+1
+
+
+
+# analysis_avsa - Test 3 ----------------------------------------------------
+# merged file that does not have one of the postures and fixing that
+test <- "1052V2.csv"
+
+# made counter 2 to add to already created table from test 1
+counter <- 2
+
+# loop starts
+
+print(test)
+
+data_merged <- read_csv(file = paste0("./3_data/analysis/merged_anno_ap/",test),
+                        col_names = T)
+
+data_event <- data_merged[data_merged$annotation != 3, ]
+
+# future tests
+data_event$annotation <- as.factor(data_event$annotation)
+data_event$ap_posture <- as.factor((data_event$ap_posture))
+
+anno_levels <- levels(data_event$annotation)
+ap_levels <- levels(data_event$ap_posture)
+
+if (length(anno_levels) < 3 || length(ap_levels) < 3) {
+  
+  event_levels <- union(anno_levels, ap_levels) %>% 
+    as.integer() %>% 
+    sort() %>% 
+    paste()
+    
+  data_event$annotation <- factor(data_event$annotation,
+                                  levels = event_levels)
+  data_event$ap_posture<- factor(data_event$ap_posture,
+                                 levels = event_levels)
+  
+} 
+
+# times: visit, event, transition (all converted to minutes)
+time_visit <- nrow(data_merged) %>% #
+  as.integer()
+time_visit <- time_visit/60
+
+time_event <- data_merged[data_merged$annotation != 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_event <- time_event/60
+
+time_trans <- data_merged[data_merged$annotation == 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_trans <- time_trans/60
+
+# check to see event and transition equal data_merged. dont include in function
+near(time_event + time_trans, nrow(data_merged)/60)
+
+# times: posture, agree & misclassification from confusion matrix
+time_matr_event <- table(data_event$ap_posture, data_event$annotation) # rows = ap
+time_matr_event <- addmargins(time_matr_event)
+time_matr_event <- time_matr_event/60 
+time_matr_event
+
+time_ap_sit <- time_matr_event[1, 4] # posture times
+time_ap_sta <- time_matr_event[2, 4]
+time_ap_mov <- time_matr_event[3, 4]
+
+time_anno_sit <- time_matr_event[4, 1]
+time_anno_sta <- time_matr_event[4, 2]
+time_anno_mov <- time_matr_event[4, 3]
+
+time_agre_ss <- time_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+time_miss_st <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
+time_miss_sm <- time_matr_event[1, 3] # "anno misclassified ap sitting as movement"
+
+time_miss_ts <- time_matr_event[2, 1]
+time_agre_tt <- time_matr_event[2, 2] # "anno agrees with ap standing"
+time_miss_tm <- time_matr_event[2, 3]
+
+time_miss_ms <- time_matr_event[3, 1]
+time_miss_mt <- time_matr_event[3, 2]
+time_agre_mm <- time_matr_event[3, 3]
+
+time_agre_total <- time_agre_ss + time_agre_tt + time_agre_mm 
+
+# check
+sum(data_merged$annotation == data_merged$ap_posture)/60 # TRUE = agree, adds all sec they agree
+time_agre_total == sum(data_merged$annotation == data_merged$ap_posture)/60
+
+# time table
+id <- data_merged$ID[1]
+visit <- data_merged$Visit[1]
+
+table_analysis_time <- data.frame(ID             = id,
+                                  Visit          = visit,
+                                  visit_time     = time_visit,
+                                  event_time     = time_event,
+                                  trans_time     = time_trans,
+                                  sit_ap         = time_ap_sit,
+                                  sit_anno       = time_anno_sit,
+                                  stand_ap       = time_ap_sta,
+                                  stand_anno     = time_anno_sta,
+                                  move_ap        = time_ap_mov,
+                                  move_anno      = time_anno_mov,
+                                  sit_agree      = time_agre_ss,
+                                  stand_agree    = time_agre_tt,
+                                  move_agree     = time_agre_mm,
+                                  sit_mis_stand  = time_miss_st,
+                                  sit_mis_move   = time_miss_sm,
+                                  stand_mis_sit  = time_miss_ts,
+                                  stand_mis_move = time_miss_tm,
+                                  move_mis_sit   = time_miss_ms,
+                                  move_mis_stand = time_miss_mt)
+
+
+# percentages: event, transition, total agreement and event agreement
+perc_event <- time_event/time_visit*100 #
+perc_trans <- time_trans/time_visit*100
+perc_agre_total <-  time_agre_total/time_visit*100 #
+perc_agre_event <-  time_agre_total/time_event*100 #
+
+# percentages: agree and misclassification by ap posture from confusion matrix
+perc_sit_row <- time_matr_event[1, ]/time_ap_sit # dividing by ap posture times, are = to
+perc_sta_row <- time_matr_event[2, ]/time_ap_sta
+perc_mov_row <- time_matr_event[3, ]/time_ap_mov
+
+perc_matr_event <- rbind(perc_sit_row, perc_sta_row, perc_mov_row)
+perc_matr_event <- perc_matr_event*100
+perc_matr_event
+
+perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+perc_ap_sta <- time_ap_sta/time_event*100
+perc_ap_mov <- time_ap_mov/time_event*100
+perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+
+perc_anno_sit <- time_anno_sit/time_event*100
+perc_anno_sta <- time_anno_sta/time_event*100
+perc_anno_mov <- time_anno_mov/time_event*100
+perc_anno_sit + perc_anno_sta + perc_anno_mov == 100
+
+perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+perc_miss_st <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+perc_miss_sm <- perc_matr_event[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+
+perc_miss_ts <- perc_matr_event[2, 1]
+perc_agre_tt <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+perc_miss_tm <- perc_matr_event[2, 3]
+
+perc_miss_ms <- perc_matr_event[3, 1]
+perc_miss_mt <- perc_matr_event[3, 2]
+perc_agre_mm <- perc_matr_event[3, 3]
+
+# percentage table
+table_analysis_percentage <- data.frame(ID             = id,
+                                        Visit          = visit,
+                                        perc_event     = perc_event,
+                                        perc_trans     = perc_trans,
+                                        sit_ap         = perc_ap_sit,
+                                        sit_anno       = perc_anno_sit,
+                                        stand_ap       = perc_ap_sta,
+                                        stand_anno     = perc_anno_sta,
+                                        move_ap        = perc_ap_mov,
+                                        move_anno      = perc_anno_mov,
+                                        total_agree    = perc_agre_total,
+                                        event_agree    = perc_agre_event,
+                                        sit_agree      = perc_agre_ss,
+                                        stand_agree    = perc_agre_tt,
+                                        move_agree     = perc_agre_mm,
+                                        sit_mis_stand  = perc_miss_st,
+                                        sit_mis_move   = perc_miss_sm,
+                                        stand_mis_sit  = perc_miss_ts,
+                                        stand_mis_move = perc_miss_tm,
+                                        move_mis_sit   = perc_miss_ms,
+                                        move_mis_stand = perc_miss_mt)
+
+
+
+if (counter == 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = T,
+            append = F)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = T,
+            append = F)
+  
+}
+
+if (counter > 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = F,
+            append = T)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = F,
+            append = T)
+  
+}
+
+counter <- counter+1
+
+
+
+# analysis_avsa - Test 4 --------------------------------------------------
+# merged file where both anno and ap do not have one of the postures and fixing that
+test <- "1074V2.csv"
+
+# made counter 2 to add to already created table from test 1
+counter <- 2
+
+# loop starts
+
+print(test)
+
+data_merged <- read_csv(file = paste0("./3_data/analysis/merged_anno_ap/",test),
+                        col_names = T)
+
+data_event <- data_merged[data_merged$annotation != 3, ]
+
+# future tests
+data_event$annotation <- as.factor(data_event$annotation)
+data_event$ap_posture <- as.factor((data_event$ap_posture))
+
+anno_levels <- levels(data_event$annotation)
+ap_levels <- levels(data_event$ap_posture)
+
+if (length(anno_levels) < 3 || length(ap_levels) < 3) {
+  
+  event_levels <- union(anno_levels, ap_levels) %>% 
+    as.integer() %>% 
+    sort() %>% 
+    paste()
+  
+  if (all(event_levels == c("0", "1", "2"))) {
+    
+    data_event$annotation <- factor(data_event$annotation,
+                                    levels = event_levels)
+    data_event$ap_posture<- factor(data_event$ap_posture,
+                                   levels = event_levels)
+    
+  } else if (all(event_levels == c("1", "2"))) {
+    
+    event_levels[length(event_levels) + 1] <- "3"
+    data_event$annotation <- factor(data_event$annotation,
+                                    levels = event_levels)
+    data_event$ap_posture<- factor(data_event$ap_posture,
+                                   levels = event_levels)
+    
+  } 
+}
+
+paste
+names(anno_levels)
+paste0(anno_levels, collapse = "")
+switch(EXPR = anno_levels,
+       "0" = )
+
+levels(data_event$annotation)
+levels(data_event$ap_posture)
+
+anno_levels <- paste(sort(as.integer(union(anno_levels, ap_levels))))
+union(anno_levels, ap_levels)
+levels <- union(anno_levels, ap_levels)
+levels <- order(union(anno_levels, ap_levels))
+lev <- factor()
+
+l <- length(anno_levels)
+n <- length(ap_levels)
+
+if (l==1){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels[length(anno.levels) + 1] <- "2"
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (l==2){
+  anno.levels[length(anno.levels) + 1] <- "1"
+  anno.levels <- sort(anno.levels)
+  events.1sec$annotation <- factor(events.1sec$annotation, levels = anno.levels)
+} 
+if (n==1){
+  ap.levels[length(ap.levels) + 1] <- "1"
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+if (n==2){
+  ap.levels[length(ap.levels) + 1] <- "2"
+  events.1sec$ap.posture <- factor(events.1sec$ap.posture, levels = ap.levels)
+} 
+
+# times: visit, event, transition (all converted to minutes)
+time_visit <- nrow(data_merged) %>% #
+  as.integer()
+time_visit <- time_visit/60
+
+time_event <- data_merged[data_merged$annotation != 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_event <- time_event/60
+
+time_trans <- data_merged[data_merged$annotation == 3, ] %>% #
+  nrow(.) %>% 
+  as.integer()
+time_trans <- time_trans/60
+
+# check to see event and transition equal data_merged. dont include in function
+near(time_event + time_trans, nrow(data_merged)/60)
+
+# times: posture, agree & misclassification from confusion matrix
+time_matr_event <- table(data_event$ap_posture, data_event$annotation) # rows = ap
+time_matr_event <- addmargins(time_matr_event)
+time_matr_event <- time_matr_event/60 
+time_matr_event
+
+time_ap_sit <- time_matr_event[1, 4] # posture times
+time_ap_sta <- time_matr_event[2, 4]
+time_ap_mov <- time_matr_event[3, 4]
+
+time_anno_sit <- time_matr_event[4, 1]
+time_anno_sta <- time_matr_event[4, 2]
+time_anno_mov <- time_matr_event[4, 3]
+
+time_agre_ss <- time_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+time_miss_st <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
+time_miss_sm <- time_matr_event[1, 3] # "anno misclassified ap sitting as movement"
+
+time_miss_ts <- time_matr_event[2, 1]
+time_agre_tt <- time_matr_event[2, 2] # "anno agrees with ap standing"
+time_miss_tm <- time_matr_event[2, 3]
+
+time_miss_ms <- time_matr_event[3, 1]
+time_miss_mt <- time_matr_event[3, 2]
+time_agre_mm <- time_matr_event[3, 3]
+
+time_agre_total <- time_agre_ss + time_agre_tt + time_agre_mm 
+
+# check
+sum(data_merged$annotation == data_merged$ap_posture)/60 # TRUE = agree, adds all sec they agree
+time_agre_total == sum(data_merged$annotation == data_merged$ap_posture)/60
+
+# time table
+id <- data_merged$ID[1]
+visit <- data_merged$Visit[1]
+
+table_analysis_time <- data.frame(ID             = id,
+                                  Visit          = visit,
+                                  visit_time     = time_visit,
+                                  event_time     = time_event,
+                                  trans_time     = time_trans,
+                                  sit_ap         = time_ap_sit,
+                                  sit_anno       = time_anno_sit,
+                                  stand_ap       = time_ap_sta,
+                                  stand_anno     = time_anno_sta,
+                                  move_ap        = time_ap_mov,
+                                  move_anno      = time_anno_mov,
+                                  sit_agree      = time_agre_ss,
+                                  stand_agree    = time_agre_tt,
+                                  move_agree     = time_agre_mm,
+                                  sit_mis_stand  = time_miss_st,
+                                  sit_mis_move   = time_miss_sm,
+                                  stand_mis_sit  = time_miss_ts,
+                                  stand_mis_move = time_miss_tm,
+                                  move_mis_sit   = time_miss_ms,
+                                  move_mis_stand = time_miss_mt)
+
+
+# percentages: event, transition, total agreement and event agreement
+perc_event <- time_event/time_visit*100 #
+perc_trans <- time_trans/time_visit*100
+perc_agre_total <-  time_agre_total/time_visit*100 #
+perc_agre_event <-  time_agre_total/time_event*100 #
+
+# percentages: agree and misclassification by ap posture from confusion matrix
+perc_sit_row <- time_matr_event[1, ]/time_ap_sit # dividing by ap posture times, are = to
+perc_sta_row <- time_matr_event[2, ]/time_ap_sta
+perc_mov_row <- time_matr_event[3, ]/time_ap_mov
+
+perc_matr_event <- rbind(perc_sit_row, perc_sta_row, perc_mov_row)
+perc_matr_event <- perc_matr_event*100
+perc_matr_event
+
+perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+perc_ap_sta <- time_ap_sta/time_event*100
+perc_ap_mov <- time_ap_mov/time_event*100
+perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+
+perc_anno_sit <- time_anno_sit/time_event*100
+perc_anno_sta <- time_anno_sta/time_event*100
+perc_anno_mov <- time_anno_mov/time_event*100
+perc_anno_sit + perc_anno_sta + perc_anno_mov == 100
+
+perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
+perc_miss_st <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+perc_miss_sm <- perc_matr_event[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+
+perc_miss_ts <- perc_matr_event[2, 1]
+perc_agre_tt <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+perc_miss_tm <- perc_matr_event[2, 3]
+
+perc_miss_ms <- perc_matr_event[3, 1]
+perc_miss_mt <- perc_matr_event[3, 2]
+perc_agre_mm <- perc_matr_event[3, 3]
+
+# percentage table
+table_analysis_percentage <- data.frame(ID             = id,
+                                        Visit          = visit,
+                                        perc_event     = perc_event,
+                                        perc_trans     = perc_trans,
+                                        sit_ap         = perc_ap_sit,
+                                        sit_anno       = perc_anno_sit,
+                                        stand_ap       = perc_ap_sta,
+                                        stand_anno     = perc_anno_sta,
+                                        move_ap        = perc_ap_mov,
+                                        move_anno      = perc_anno_mov,
+                                        total_agree    = perc_agre_total,
+                                        event_agree    = perc_agre_event,
+                                        sit_agree      = perc_agre_ss,
+                                        stand_agree    = perc_agre_tt,
+                                        move_agree     = perc_agre_mm,
+                                        sit_mis_stand  = perc_miss_st,
+                                        sit_mis_move   = perc_miss_sm,
+                                        stand_mis_sit  = perc_miss_ts,
+                                        stand_mis_move = perc_miss_tm,
+                                        move_mis_sit   = perc_miss_ms,
+                                        move_mis_stand = perc_miss_mt)
+
+
+
+if (counter == 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = T,
+            append = F)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = T,
+            append = F)
+  
+}
+
+if (counter > 1) {
+  
+  write_csv(table_analysis_time,
+            path = "./3_data/analysis/table_analysis_time.csv",
+            col_names = F,
+            append = T)
+  
+  write_csv(table_analysis_percentage,
+            path = "./3_data/analysis/table_analysis_percentage.csv",
+            col_names = F,
+            append = T)
+  
+}
+
+counter <- counter+1
 
 
 
 # other -------------------------------------------------------------------
 
+
+# aggregrating
+time_anno_pos <- data_event %>% 
+  group_by(annotation) %>%
+  summarise(time = length(annotation))
+
+df.60sec <- df.1sec %>% 
+  group_by(ID, by60 = cut(time, "60 sec")) %>%
+  summarise(annotation = Modes(annotation), ap.posture = Modes(ap.posture))
+
+Modes <- function(x) {
+  
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+  
+}
 
 
 # checks
@@ -1954,11 +2864,6 @@ test = "FLAC_1042V2_POSTURE_CHANG.CSV"
   Filename4 = aplist3
   write.csv(merged.frame, file = paste0("./data/merged/", Filename4))
 }
-
-
-
-
-
 
 
 # testing count function 
@@ -2054,6 +2959,59 @@ counter <- counter+1
 
 # maybe for later??
 on_off_log$hours_on <- as.vector(difftime(strptime(on_off_log$date_time_off,format="%Y-%m-%d %H:%M:%S"),strptime(on_off_log$date_time_on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
+
+# kappa 
+
+
+
+events.1sec <- lapply(event.list.1sec, read.csv, header=T)
+events.1sec <- do.call(rbind, events.1sec)
+events.1sec <- events.1sec[ ,-c(1,2)]
+
+t <- table(events.1sec$ap.posture, events.1sec$annotation)
+t
+x<- addmargins(t)
+x
+45020+8602+28891
+3852/21012 + 9496/21012 + 7664/21012
+9496/21012
+7664/21012
+8602/21012
+28891/18742
+41047/42759
+17959/18742
+
+### total kappa ###
+events.1sec <- lapply(event.list.1sec, read.csv, header=T)
+events.1sec <- do.call(rbind, events.1sec)
+events.1sec <- events.1sec[ ,-c(1)]
+
+nrow(subset(events.1sec, ap.posture==0 & annotation==1))
+t[1,2]
+table(events.1sec$ap.posture, events.1sec$annotation)
+
+t <- table(events.1sec$ap.posture, events.1sec$annotation)
+
+
+
+kappa2(events.1sec, weight = "equal")
+kap.1sec <- kappa2(events.1sec, weight = "equal")
+kap.1sec <- do.call(rbind, kap.1sec)
+p.val.1  <- kap.1sec[8, ]
+kap.1sec <- kap.1sec[5, ]
+
+events.60sec <- lapply(event.list.60sec, read.csv, header=T)
+events.60sec <- do.call(rbind, events.60sec)
+events.60sec <- events.60sec[ ,c(5,6)]
+kappa2(events.60sec, weight = "equal")
+kap.60sec <- kappa2(events.60sec, weight = "equal")
+kap.60sec <- do.call(rbind, kap.60sec)
+p.val.60  <- kap.60sec[8, ]
+kap.60sec <- kap.60sec[5, ]
+
+### kappa per observation ###
+event.kappa.1sec(event.list.1sec)
+event.kappa.60sec(event.list.60sec)
 
 
 # Use for Noldus??? -------------------------------------------------------

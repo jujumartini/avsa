@@ -1,4 +1,11 @@
-source("./2_scripts/2_functions")
+source("./2_scripts/1_functions.R")
+
+
+# create analysis tables --------------------------------------------------
+
+list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
+
+analysis_avsa(merged_list = list_merged)
 
 
 # old stuff ---------------------------------------------------------------
@@ -140,87 +147,7 @@ moving <- counts[counts$Activpal==2, ]
 moving <- moving[moving$Activpal!=moving$Annotation, ]
 
 
-# kappa 
 
-
-
-events.1sec <- lapply(event.list.1sec, read.csv, header=T)
-events.1sec <- do.call(rbind, events.1sec)
-events.1sec <- events.1sec[ ,-c(1,2)]
-
-t <- table(events.1sec$ap.posture, events.1sec$annotation)
-t
-x<- addmargins(t)
-x
-45020+8602+28891
-3852/21012 + 9496/21012 + 7664/21012
-9496/21012
-7664/21012
-8602/21012
-28891/18742
-41047/42759
-17959/18742
-
-### total kappa ###
-events.1sec <- lapply(event.list.1sec, read.csv, header=T)
-events.1sec <- do.call(rbind, events.1sec)
-events.1sec <- events.1sec[ ,-c(1)]
-
-nrow(subset(events.1sec, ap.posture==0 & annotation==1))
-t[1,2]
-table(events.1sec$ap.posture, events.1sec$annotation)
-
-t <- table(events.1sec$ap.posture, events.1sec$annotation)
-
-
-
-kappa2(events.1sec, weight = "equal")
-kap.1sec <- kappa2(events.1sec, weight = "equal")
-kap.1sec <- do.call(rbind, kap.1sec)
-p.val.1  <- kap.1sec[8, ]
-kap.1sec <- kap.1sec[5, ]
-
-events.60sec <- lapply(event.list.60sec, read.csv, header=T)
-events.60sec <- do.call(rbind, events.60sec)
-events.60sec <- events.60sec[ ,c(5,6)]
-kappa2(events.60sec, weight = "equal")
-kap.60sec <- kappa2(events.60sec, weight = "equal")
-kap.60sec <- do.call(rbind, kap.60sec)
-p.val.60  <- kap.60sec[8, ]
-kap.60sec <- kap.60sec[5, ]
-
-### kappa per observation ###
-event.kappa.1sec(event.list.1sec)
-event.kappa.60sec(event.list.60sec)
-
-
-# testing event.kappa #
-
-counter <- 1
-temp_events <- read.csv(paste0("./", event.list.1sec[12]))
-id = as.character(temp_events$ID[1])
-temp_events <- temp_events[ ,c(3,4)]
-table(temp_events$annotation, temp_events$ap.posture)
-kappa2(temp_events)
-temp_kappa  <- kappa2(temp_events, weight = "equal")
-temp_kappa  <- do.call(rbind, temp_kappa)
-p.val       <- temp_kappa[8, ]
-temp_kappa  <- temp_kappa[5, ]
-
-if (counter==1)
-  kappa.table.1sec <- data.frame(ID = c(id, 2:15),
-                                 Visit = c(visit, 2:15),
-                                 kappa_1sec = c(temp_kappa, 2:15),
-                                 pvalue_1sec = c(p.val, 2:15)
-  )
-dat
-if (counter>1)
-  kappa.table.1sec$ID <- append(kappa.table.1sec$ID, id)
-kappa.table.1sec$Visit <- append(kappa.table.1sec$Visit, visit)
-kappa.table.1sec$kappa_1se <- append(kappa.table.1sec$kappa_1sec, temp_kappa)
-kappa.table.1sec$pvalue_1sec <- append(kappa.table.1sec$pvalue_1sec, p.val)
-
-counter <- counter+1
 
 # linear mixed effects model - bias and CI --------------------------------
 
