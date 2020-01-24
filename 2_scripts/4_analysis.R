@@ -1,4 +1,11 @@
-source("./2_scripts/2_functions")
+source("./2_scripts/1_functions.R")
+
+
+# create analysis tables --------------------------------------------------
+
+list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
+
+analysis_avsa(merged_list = list_merged)
 
 
 # old stuff ---------------------------------------------------------------
