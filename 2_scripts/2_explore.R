@@ -2796,6 +2796,10 @@ if (counter > 1) {
 
 counter <- counter+1
 
+### merged count files ###
+counts.list.1sec <- list.files("./counts/", "1sec.csv")
+counts.1sec <- lapply(counts.list.1sec, read.csv, header=T)
+counts.1sec <- do.call(rbind, counts.1sec)
 
 
 # other -------------------------------------------------------------------
@@ -2816,55 +2820,6 @@ Modes <- function(x) {
   ux[which.max(tabulate(match(x, ux)))]
   
 }
-
-
-# checks
-inds_worn <- (1:(dim(sbs_ap)[1]))[sbs_ap$off==0]
-i <- length(inds_worn)
-if(i == 0) {
-  
-  sbs_ap$off <- "AP and on.off.log do not match"
-  
-}
-
-sbs_ap$ap.posture <- 
-  as.character(sbs_ap$ap.posture) #change to character for next step
-sbs_ap$ap.posture[sbs_ap$ap.posture == "0"] <- "posture;0006 sitting" 
-sbs_ap$ap.posture[sbs_ap$ap.posture == "1"] <- "posture;0007 standing" 
-sbs_ap$ap.posture[sbs_ap$ap.posture == "2"] <- "posture;0008 movement"
-
-#### testing merge function
-test = "FLAC_1042V2_POSTURE_CHANG.CSV"
-{
-  image.frame <- read.csv(paste0("./data/image", 
-                                 "/",
-                                 test),
-                          header = T,
-                          sep = ",",
-                          stringsAsFactors = F)
-  image.frame <- image.frame[ ,-c(1)]  
-  ID = as.character(substr(test, 6, 9))
-  Visit = as.character(substr(test, 10, 11))
-  
-  ap.frame <- read.csv(paste0("./data/ap/", 
-                              "FLAC_",
-                              ID,
-                              "_",
-                              Visit,
-                              ".csv"),
-                       header = T,
-                       sep = ",",
-                       stringsAsFactors = F)
-  ap.frame <- ap.frame[ ,-c(1)]  
-  
-  merged.frame <- full_join(image.frame, ap.frame)
-  merged.frame <- merged.frame[ ,-c(2,3)]
-  merged.frame <- merged.frame[complete.cases(merged.frame), ]
-  merged.frame$ID <- paste(c(as.character(substr(test, 6, 9)), as.character(substr(test, 10, 11))), collapse = "")
-  Filename4 = aplist3
-  write.csv(merged.frame, file = paste0("./data/merged/", Filename4))
-}
-
 
 # testing count function 
 
@@ -2954,12 +2909,6 @@ kappa.table.1sec$pvalue_1sec <- append(kappa.table.1sec$pvalue_1sec, p.val)
 
 counter <- counter+1
 
-
-
-
-# maybe for later??
-on_off_log$hours_on <- as.vector(difftime(strptime(on_off_log$date_time_off,format="%Y-%m-%d %H:%M:%S"),strptime(on_off_log$date_time_on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
-
 # kappa 
 
 
@@ -3012,6 +2961,9 @@ kap.60sec <- kap.60sec[5, ]
 ### kappa per observation ###
 event.kappa.1sec(event.list.1sec)
 event.kappa.60sec(event.list.60sec)
+
+# maybe for later??
+on_off_log$hours_on <- as.vector(difftime(strptime(on_off_log$date_time_off,format="%Y-%m-%d %H:%M:%S"),strptime(on_off_log$date_time_on,format="%Y-%m-%d %H:%M:%S"), units="hours"))
 
 
 # Use for Noldus??? -------------------------------------------------------
