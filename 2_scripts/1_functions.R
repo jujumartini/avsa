@@ -426,13 +426,23 @@ analysis_avsa <- function(merged_list) {
         sort() %>% 
         paste()
       
-      data_event$annotation <- factor(data_event$annotation,
-                                      levels = event_levels)
-      data_event$ap_posture<- factor(data_event$ap_posture,
-                                     levels = event_levels)
-      
-    }
-    
+      if (all(event_levels == c("0", "1", "2"))) {
+        
+        data_event$annotation <- factor(data_event$annotation,
+                                        levels = event_levels)
+        data_event$ap_posture<- factor(data_event$ap_posture,
+                                       levels = event_levels)
+        
+      } else if (all(event_levels == c("1", "2"))) {
+        
+        event_levels[length(event_levels) + 1] <- "3"
+        data_event$annotation <- factor(data_event$annotation,
+                                        levels = event_levels)
+        data_event$ap_posture<- factor(data_event$ap_posture,
+                                       levels = event_levels)
+        
+      } 
+    }    
     # times: visit, event, transition (all converted to minutes)
     time_visit <- nrow(data_merged) %>% #
       as.integer()
