@@ -65,3 +65,9 @@ merge_anno_ap(list_anno = list_anno_clean)
 warnings()
 
 
+# create analysis tables --------------------------------------------------
+
+list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
+
+analysis_avsa(merged_list = list_merged)
+warnings()
