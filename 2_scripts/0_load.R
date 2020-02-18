@@ -1,5 +1,5 @@
-# Ctrl + Shift + F10 to restart session
-# Ctrl + A to Select all
+# Ctrl + Shift + F10   :   restart session
+# Ctrl + Shift + Enter :   run whole script
 
 # load packages
 library(tidyverse)
