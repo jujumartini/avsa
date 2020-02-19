@@ -45,6 +45,8 @@ read_on_off_log <- function(path) {
   
 }
 
+
+
 read_timestamps <- function(path) {
   
   corr_times <- suppressMessages(vroom(file = path,
@@ -107,7 +109,11 @@ process_anno <- function(anno_file_list,
   # create processed anno files
   for (i in seq_along(anno_file_list)) {
     
-    print(anno_file_list[i])
+    file_name <- sub("\\_P.*",
+                     "",
+                     anno_file_list[i])
+    
+    message("\nProcessing ", file_name, "...")
     
     raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", anno_file_list[i]),
                            header = T,
@@ -133,10 +139,11 @@ process_anno <- function(anno_file_list,
                              "Visit"))
 
     # check#1: See if timestamp was entered
-    if (dim(mer_anno)[1] == 0) {
+    if (all(is.na(mer_anno$Difference))) {
       
-      warning(paste(substr(anno_file_list[i], 6, 11), "annotation file does not have an entry in Timestamps.csv",
-                    sep = " "))
+      warning("\n",
+              "\n",
+              file_name, "annotation file does not have an entry in Timestamps.csv")
       
     } else {
     
@@ -165,15 +172,15 @@ process_anno <- function(anno_file_list,
       # sbs
       n <- nrow(mer_anno)
       l <- lapply(1:n, sbs)
-      sbs_anno <- Reduce(rbind, l) %>% 
-        pad()
+      sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
+        pad())
       
       # changing NA's to transition;gap
       levels <- levels(sbs_anno$annotation)
-      levels[length(levels) + 1] <- "transition;gap"
+      levels[length(levels) + 1] <- "gap"
       sbs_anno$annotation <- factor(sbs_anno$annotation,
                                     levels = levels)
-      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
+      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "gap"
       
       # on off times
       on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
@@ -183,17 +190,17 @@ process_anno <- function(anno_file_list,
       #	label off times
       sbs_anno$off <- 1
       n <- dim(sbs_anno)[1]
-      class(sbs_anno$time)
-      inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
-      sbs_anno$off[inds] <- 0
+      index <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+      sbs_anno$off[index] <- 0
       
       # check#2: see if off times were actually labeled
       inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
       i <- length(inds_worn)
       if(i == 0) {
         
-        warning(paste(substr(anno_file_list[i], 6, 11), "timestamp or on_off_log entry incorrect",
-                      sep = " "))
+        warning("\n",
+                "\n",
+                file_name, "timestamp or on_off_log entry incorrect")
         
       } else {
         
@@ -207,7 +214,8 @@ process_anno <- function(anno_file_list,
         vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
         vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
         vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
-        vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
+        vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
+        vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
         vis_anno <-vis_anno[, c("ID",
                                 "Visit",
                                 "time",
@@ -215,13 +223,15 @@ process_anno <- function(anno_file_list,
         
         # write table
         write.table(vis_anno,
-                    file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
+                    file = paste0("./3_data/processed/anno_clean/", file_name, ".csv"),
                     sep = ",",
                     row.names = F)
       }
     }
   }
 }
+
+
 
 process_ap <- function(ap_file_list,
                        on_off_log) {
@@ -442,6 +452,8 @@ process_ap <- function(ap_file_list,
   }
 }
 
+
+
 merge_anno_ap <- function(list_anno) {
 
   for (i in seq_along(list_anno)) {
@@ -476,6 +488,8 @@ merge_anno_ap <- function(list_anno) {
     }
   }
 }
+
+
 
 analysis_avsa <- function(merged_list) {
   
