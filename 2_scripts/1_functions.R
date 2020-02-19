@@ -45,23 +45,52 @@ read_on_off_log <- function(path) {
   
 }
 
-process_anno <- function(anno_file_list,
-                         corr_timstamps_path,
-                         on_off_log) {
+read_timestamps <- function(path) {
   
-  # read in timestamps csv and change to times
-  corr_times <- read.csv(file = corr_timstamps_path)
-  corr_times$StopWatch_YMD_HMS <- ymd_hms(corr_times$StopWatch_YMD_HMS, 
-                                          tz="America/Chicago")
-  corr_times$Corr_Picture_YMD_HMS <- ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
-                                             tz="America/Chicago")
+  corr_times <- suppressMessages(vroom(file = path,
+                                       delim = ",",
+                                       col_select = 1:4))
+
+  # although cameras are in UMASS when imgs are taken, img time still captured relative to midwest time
+  corr_times$StopWatch_YMD_HMS    <- suppressWarnings(ymd_hms(corr_times$StopWatch_YMD_HMS, 
+                                                              tz="America/chicago"))
+  corr_times$Corr_Picture_YMD_HMS <- suppressWarnings(ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
+                                                              tz="America/chicago"))
   
   # diff col
-  corr_times$Difference <- NA
   corr_times$Difference <- with(corr_times,
                                 difftime(StopWatch_YMD_HMS,
                                          Corr_Picture_YMD_HMS,
                                          units = "secs"))
+  
+  assign("timestamps",
+         corr_times,
+         envir = .GlobalEnv)
+  
+  id_miss <- corr_times$ID[is.na(corr_times$StopWatch_YMD_HMS) |
+                             is.na(corr_times$Corr_Picture_YMD_HMS)]
+  vis_miss <- corr_times$Visit[is.na(corr_times$StopWatch_YMD_HMS) |
+                                     is.na(corr_times$Corr_Picture_YMD_HMS)]
+  missing <- bind_cols(ID = id_miss,
+                       Visit = vis_miss)
+  missing <- paste(missing$ID,
+                   missing$Visit,
+                   sep = "v")
+  
+  for (i in seq_along(missing)) { 
+    
+    warning("\n\n   ", missing[i], ":",
+            "\n     One of the timestamps were entered incorrectly!",
+            "\n")
+    
+  }
+}
+
+
+
+process_anno <- function(anno_file_list,
+                         corr_times,
+                         on_off_log) {
   
   # sbs function for code times
   sbs <- function(i) {
@@ -112,12 +141,10 @@ process_anno <- function(anno_file_list,
     } else {
     
       # add diff to times
-      mer_anno$NEWstarttime <- NA
       mer_anno <- mer_anno %>%
         mutate(NEWstarttime = if_else(!is.na(Difference),
                                       startTime + Difference,
                                       startTime))
-      mer_anno$NEWendtime <- NA
       mer_anno <- mer_anno %>%
         mutate(NEWendtime = if_else(!is.na(Difference),
                                     endTime + Difference,

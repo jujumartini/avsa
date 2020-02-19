@@ -1,5 +1,9 @@
 source("./2_scripts/1_functions.R")
 
+
+
+# prelimary ---------------------------------------------------------------
+
 # read in on off log, needed for process functions
 read_on_off_log(path = "./3_data/raw/visit_on_off_log.csv")
 
@@ -8,10 +12,11 @@ read_on_off_log(path = "./3_data/raw/visit_on_off_log.csv")
 # image Cleaning ----------------------------------------------------------
 
 list_anno <- toupper(list.files("./3_data/raw/annotation", ".csv"))
-corr_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv"
+
+read_timestamps(path = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv")
 
 process_anno(anno_file_list = list_anno,
-             corr_timstamps_path = corr_timestamps,
+             corr_times = timestamps,
              on_off_log = log_on_off)
 warnings()
 
