@@ -2996,9 +2996,9 @@ perc_miss_mt <- perc_matr_event[3, 4]
 # percentage table
 table_analysis_percentage <- data.frame(ID             = id,
                                         Visit          = visit,
-                                        perc_event     = perc_event,
-                                        perc_gap       = perc_gap,
-                                        perc_trans     = perc_trans,
+                                        event_time     = perc_event,
+                                        gap_time       = perc_gap,
+                                        trans_time     = perc_trans,
                                         sit_ap         = perc_ap_sit,
                                         sit_anno       = perc_anno_sit,
                                         stand_ap       = perc_ap_sta,
@@ -3050,6 +3050,183 @@ if (counter > 1) {
   
 }
 
+
+
+# create summary file tests -----------------------------------------------
+create_posture_summary()
+
+data_time <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_time.csv",
+                                    delim = ","))
+data_percentage <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_percentage.csv",
+                                          delim = ","))
+
+# changing Na to 0
+data_time[is.na(data_time)] <- 0
+data_percentage[is.na(data_percentage)] <- 0
+
+# means and sd
+colSd <- function(x, na.rm = T) {
+  
+  if (na.rm) {
+    
+    n <- colSums(!is.na(x))
+    
+  } else {
+    
+    n <- nrow(x)
+    
+  }
+  
+  colVar <- colMeans(x*x, na.rm = na.rm) - (colMeans(x, na.rm = na.rm))^2
+  
+  return(sqrt(colVar * n/(n-1)))
+  
+}
+
+avg_times <- colMeans(data_time)
+sd_times <- colSd(data_time)
+
+avg_percs <- colMeans(data_percentage)
+sd_percs <- colSd(data_percentage)
+
+# table of time and perc
+tbl_sum_vis_time <- bind_rows(avg_times,
+                              sd_times) %>% 
+  as.data.frame()
+
+tbl_sum_vis_perc <- bind_rows(avg_percs,
+                              sd_percs) %>% 
+  as.data.frame()
+
+# merge table 
+tbl_sum_vis <- bind_rows(tbl_sum_vis_time,
+                         tbl_sum_vis_perc) %>% 
+  t() %>% 
+  as.data.frame()
+
+# clean
+colnames(tbl_sum_vis) <- c("mean_min",
+                           "sd_min",
+                           "mean_perc",
+                           "sd_perc")
+
+tbl_sum_vis <- tbl_sum_vis[-(1:2), ]
+
+tbl_sum_vis <- round(tbl_sum_vis, 1)
+
+tbl_sum_vis <- rownames_to_column(tbl_sum_vis,
+                                  var = "variable")
+comments <- c(NA,
+              "% of visit time", "% of visit time", "% of visit time", "% of visit time",
+              "% of event time", "% of event time", "% of event time", "% of event time",
+              "% of event time", "% of event time", "% of event time", "% of event time",
+              "% of event time", "% of event time", "% of visit time", "% of visit time",
+              "% of visit time", "% of event time", "% of event time","% of event time",
+              "% of event time", "% of event time", "% of event time")
+
+tbl_sum_vis$comment <- comments
+
+# write
+vroom_write(tbl_sum_vis,
+            path = "./4_results/summary_visit.csv",
+            delim = ",")
+write_rds(tbl_sum_vis,
+          path = "./4_results/summary_visit.rds",
+          compress = "none")
+
+assign("tbl_sum_vis",
+       tbl_sum_vis,
+       envir = .GlobalEnv)
+
+# make a table for the posture results:
+tbl_sum_pos_time <- data.frame(posture = c("sit","stand","move"))
+
+# raw means:
+tbl_sum_pos_time$ap_mean  <- c(mean(data_time$sit_ap),
+                               mean(data_time$stand_ap),
+                               mean(data_time$move_ap))
+tbl_sum_pos_time$ap_sd    <- c(sd(data_time$sit_ap),
+                               sd(data_time$stand_ap),
+                               sd(data_time$move_ap))
+tbl_sum_pos_time$img_mean <- c(mean(data_time$sit_anno),
+                               mean(data_time$stand_anno),
+                               mean(data_time$move_anno))
+tbl_sum_pos_time$img_sd   <- c(sd(data_time$sit_anno),
+                               sd(data_time$stand_anno),
+                               sd(data_time$move_anno))
+
+# linear mixed effects model: bias~b0 + b_i + e_ij
+sitmodel <- lmer(sit_anno - sit_ap ~ 1 + (1|ID),
+                 data = data_time)
+standmodel <- lmer(stand_anno - stand_ap ~ 1 + (1|ID),
+                   data = data_time)
+movemodel <- lmer(move_anno - move_ap ~ 1 + (1|ID),
+                  data = data_time)
+
+# biases are estimated from model
+tbl_sum_pos_time$bias <- c(fixef(sitmodel),
+                           fixef(standmodel),
+                           fixef(movemodel))
+
+# se is "unexplained variability" in the biases
+VarCorr(sitmodel)
+as.data.frame(VarCorr(sitmodel))
+tbl_sum_pos_time$SE <- c(as.data.frame(VarCorr(sitmodel))[2,5],
+                         as.data.frame(VarCorr(standmodel))[2,5],
+                         as.data.frame(VarCorr(movemodel))[2,5])
+
+# approximate 95% CIs
+tbl_sum_pos_time$upper_95_bias <- tbl_sum_pos_time$lower_95_bias <- NA
+confint(sitmodel)
+confint(sitmodel, 3)
+tbl_sum_pos_time[,8:9] <- rbind(confint(sitmodel,3),
+                                confint(standmodel,3),
+                                confint(movemodel,3))
+
+# transition time when ap said a posture
+tbl_sum_pos_time$img_trans_mean <- c(mean(data_time$sit_trans),
+                                     mean(data_time$stand_trans),
+                                     mean(data_time$move_trans))
+
+# misclassifications
+tbl_sum_pos_time$img_miss_sit_mean   <- c(0,
+                                          mean(data_time$stand_mis_sit),
+                                          mean(data_time$move_mis_sit))
+
+tbl_sum_pos_time$img_miss_stand_mean <- c(mean(data_time$sit_mis_stand),
+                                          0,
+                                          mean(data_time$move_mis_stand))
+
+tbl_sum_pos_time$img_miss_move_mean  <- c(mean(data_time$sit_mis_move),
+                                          mean(data_time$stand_mis_move),
+                                          0)
+
+# % sum table
+tbl_sum_pos_perc <- tbl_sum_pos_time
+
+tbl_sum_pos_perc$bias          <- (tbl_sum_pos_time$bias / tbl_sum_pos_time$ap_mean)*100
+tbl_sum_pos_perc$SE            <- (tbl_sum_pos_time$SE/tbl_sum_pos_time$ap_mean)*100
+tbl_sum_pos_perc$lower_95_bias <- (tbl_sum_pos_time$lower_95_bias/tbl_sum_pos_time$ap_mean)*100
+tbl_sum_pos_perc$upper_95_bias <- (tbl_sum_pos_time$upper_95_bias/tbl_sum_pos_time$ap_mean)*100
+
+# round to 1 digit, arbitrarily
+tbl_sum_pos_time[,-1] <- round(tbl_sum_pos_time[,-1], 1)
+tbl_sum_pos_perc[,-1] <- round(tbl_sum_pos_perc[,-1], 1)
+
+# output summary posture tables
+
+write_rds(tbl_sum_pos_time,
+          path = "./4_results/summary_posture_time.rds",
+          compress = "none")
+write_rds(tbl_sum_pos_perc,
+          path = "./4_results/summary_posture_perc.rds",
+          compress = "none")
+vroom_write(tbl_sum_pos_time,
+            path = "./4_results/summary_posture_mins.csv",
+            ddelim = ",")
+vroom_write(tbl_sum_pos_perc,
+            path = "./4_results/summary_posture_perc.csv",
+            delim = ",")
 
 
 

@@ -1,7 +1,5 @@
 source("./2_scripts/1_functions.R")
 
-
-
 # prelimary ---------------------------------------------------------------
 
 # read in on off log, needed for process functions
