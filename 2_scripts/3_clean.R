@@ -36,7 +36,8 @@ warnings()
 
 # merging -----------------------------------------------------------------
 
-list_anno_clean <- list.files("./3_data/processed/anno_clean/")
+list_anno_clean <- list.files("./3_data/processed/anno_clean/",
+                              pattern = "FLAC")
 
 merge_anno_ap(list_anno = list_anno_clean)
 warnings()
