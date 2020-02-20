@@ -8,5 +8,6 @@ library(lubridate)
 library(padr)
 library(irr)
 library(lme4)
+library(formattable)
 
 tidyverse_conflicts()

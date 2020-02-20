@@ -131,3 +131,64 @@ for (i in 1:3) {
 }
 
 
+# Tables ------------------------------------------------------------------
+
+tbl_sum_vis <- read_rds(path = "./4_results/summary_visit.rds")
+tbl_sum_pos_time <- read_rds(path = "./4_results/summary_posture_time.rds")
+tbl_sum_pos_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
+
+tbl_bias_time <- tbl_sum_pos_time[, -c(4, 5, 10, 11, 12, 13)]
+tbl_miss_time <- tbl_sum_pos_time[, c(1, 4, 5, 10, 11, 12, 13)]
+
+# capitalizing
+substr(colnames(tbl_bias_time), 1, 1) <- toupper(substr(colnames(tbl_bias_time), 1, 1))
+substr(colnames(tbl_bias_time)[2:3], 1, 2) <- toupper(substr(colnames(tbl_bias_time)[2:3], 1, 2))
+
+tbl_bias_time$Posture <- as.character(tbl_bias_time$Posture)
+substr(tbl_bias_time$Posture, 1, 1) <- toupper(substr(tbl_bias_time$Posture, 1, 1))
+
+substr(colnames(tbl_miss_time), 1, 1) <- toupper(substr(colnames(tbl_miss_time), 1, 1))
+substr(colnames(tbl_miss_time)[2:3], 1, 2) <- toupper(substr(colnames(tbl_miss_time)[2:3], 1, 2))
+
+tbl_miss_time$Posture <- as.character(tbl_miss_time$Posture)
+substr(tbl_miss_time$Posture, 1, 1) <- toupper(substr(tbl_miss_time$Posture, 1, 1))
+
+# format
+formattable(tbl_bias_time,
+            list(Posture = formatter("span",
+                                     style = x ~ style(font.weight = "bold"))),
+             align = c("l", "c", "c", "c", "c", "c", "c"))
+
+formattable(tbl_miss_time,
+            list(Posture = formatter("span",
+                                     style = x ~ style(font.weight = "bold"))),
+            align = c("l", "c", "c", "c", "c", "c", "c"))
+
+
+# percent
+tbl_bias_perc <- tbl_sum_pos_perc[, -c(4, 5, 10, 11, 12, 13)]
+tbl_miss_perc <- tbl_sum_pos_perc[, c(1, 4, 5, 10, 11, 12, 13)]
+
+# capitalizing
+substr(colnames(tbl_bias_perc), 1, 1) <- toupper(substr(colnames(tbl_bias_perc), 1, 1))
+substr(colnames(tbl_bias_perc)[2:3], 1, 2) <- toupper(substr(colnames(tbl_bias_perc)[2:3], 1, 2))
+
+tbl_bias_perc$Posture <- as.character(tbl_bias_perc$Posture)
+substr(tbl_bias_perc$Posture, 1, 1) <- toupper(substr(tbl_bias_perc$Posture, 1, 1))
+
+substr(colnames(tbl_miss_perc), 1, 1) <- toupper(substr(colnames(tbl_miss_perc), 1, 1))
+substr(colnames(tbl_miss_perc)[2:3], 1, 2) <- toupper(substr(colnames(tbl_miss_perc)[2:3], 1, 2))
+
+tbl_miss_perc$Posture <- as.character(tbl_miss_perc$Posture)
+substr(tbl_miss_perc$Posture, 1, 1) <- toupper(substr(tbl_miss_perc$Posture, 1, 1))
+
+# format
+formattable(tbl_bias_perc,
+            list(Posture = formatter("span",
+                                     style = x ~ style(font.weight = "bold"))),
+            align = c("l", "c", "c", "c", "c", "c", "c"))
+
+formattable(tbl_miss_perc,
+            list(Posture = formatter("span",
+                                     style = x ~ style(font.weight = "bold"))),
+            align = c("l", "c", "c", "c", "c", "c", "c"))
