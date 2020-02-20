@@ -28,6 +28,11 @@ v1.4.0
     -moved old code to explore and took them out of 4_analysis, 3_clean, and 1_functions  
     -moved loading the on off log to 3_clean since it isnt needed for all scripts  
     
+v2.0.0  
+  -cleaned analysis functions  
+  -incorported vroom function into reading and writing files  
+  -made reading timestamps, on_off_log, summary files into their own functions  
+  
 Future Goals:  
   -find a way to have analysis function take into account if either annotation and ap_posture have only 1 posture
-   and if they differ (reference noldus code for this)  
+   and if they differ (reference noldus code for this) DONE  

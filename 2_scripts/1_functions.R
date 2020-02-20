@@ -1,18 +1,98 @@
-process_anno <- function(anno_file_list, corr_timstamps_path) {
+read_on_off_log <- function(path) {
   
-  # read in timestamps csv and change to times
-  corr_times <- read.csv(file = corr_timstamps_path)
-  corr_times$StopWatch_YMD_HMS <- ymd_hms(corr_times$StopWatch_YMD_HMS, 
-                                          tz="America/Chicago")
-  corr_times$Corr_Picture_YMD_HMS <- ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
-                                             tz="America/Chicago")
+  on_off_log <- suppressMessages(vroom(file = path,
+                                       delim = ","))
+  
+  on_off_log$date_on <- paste(on_off_log$date_on_month,
+                              on_off_log$date_on_day,
+                              on_off_log$date_on_year,
+                              sep="/")
+  on_off_log$time_on <- paste(on_off_log$time_on_hour,
+                              on_off_log$time_on_minute,
+                              on_off_log$time_on_seconds,
+                              sep=":")
+  on_off_log$date_off <- paste(on_off_log$date_off_month,
+                               on_off_log$date_off_day,
+                               on_off_log$date_off_year,
+                               sep="/")
+  on_off_log$time_off <- paste(on_off_log$time_off_hour,
+                               on_off_log$time_off_minute,
+                               on_off_log$time_off_seconds,
+                               sep=":")
+  on_off_log$date_time_on <- paste(on_off_log$date_on,
+                                   on_off_log$time_on,
+                                   sep=" ")
+  on_off_log$date_time_off <- paste(on_off_log$date_off,
+                                    on_off_log$time_off,
+                                    sep=" ")
+  on_off_log$date_time_on <- strptime(on_off_log$date_time_on,
+                                      "%m/%d/%Y %H:%M:%S")
+  on_off_log$date_time_off <- strptime(on_off_log$date_time_off,
+                                       "%m/%d/%Y %H:%M:%S")
+  on_off_log$date_time_on <- force_tz(on_off_log$date_time_on,
+                                      tz = "America/Chicago")
+  on_off_log$date_time_off <- force_tz(on_off_log$date_time_off,
+                                       tz = "America/Chicago")
+  
+  on_off_log <- on_off_log[, c("ID",
+                               "Visit",
+                               "date_time_on",
+                               "date_time_off")]
+  
+  assign("log_on_off",
+         on_off_log,
+         envir = .GlobalEnv)
+  
+}
+
+
+
+read_timestamps <- function(path) {
+  
+  corr_times <- suppressMessages(vroom(file = path,
+                                       delim = ",",
+                                       col_select = 1:4))
+
+  # although cameras are in UMASS when imgs are taken, img time still captured relative to midwest time
+  corr_times$StopWatch_YMD_HMS    <- suppressWarnings(ymd_hms(corr_times$StopWatch_YMD_HMS, 
+                                                              tz="America/chicago"))
+  corr_times$Corr_Picture_YMD_HMS <- suppressWarnings(ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
+                                                              tz="America/chicago"))
   
   # diff col
-  corr_times$Difference <- NA
   corr_times$Difference <- with(corr_times,
                                 difftime(StopWatch_YMD_HMS,
                                          Corr_Picture_YMD_HMS,
                                          units = "secs"))
+  
+  assign("timestamps",
+         corr_times,
+         envir = .GlobalEnv)
+  
+  id_miss <- corr_times$ID[is.na(corr_times$StopWatch_YMD_HMS) |
+                             is.na(corr_times$Corr_Picture_YMD_HMS)]
+  vis_miss <- corr_times$Visit[is.na(corr_times$StopWatch_YMD_HMS) |
+                                     is.na(corr_times$Corr_Picture_YMD_HMS)]
+  missing <- bind_cols(ID = id_miss,
+                       Visit = vis_miss)
+  missing <- paste(missing$ID,
+                   missing$Visit,
+                   sep = "v")
+  
+  for (i in seq_along(missing)) { 
+    
+    warning("\n\n   ", missing[i], ":",
+            "\n     One of the timestamps were entered incorrectly!",
+            "\n")
+    
+  }
+}
+
+
+
+process_anno <- function(anno_file_list,
+                         corr_times,
+                         on_off_log) {
   
   # sbs function for code times
   sbs <- function(i) {
@@ -29,7 +109,11 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
   # create processed anno files
   for (i in seq_along(anno_file_list)) {
     
-    print(anno_file_list[i])
+    file_name <- sub("\\_P.*",
+                     "",
+                     anno_file_list[i])
+    
+    message("\nProcessing ", file_name, "...")
     
     raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", anno_file_list[i]),
                            header = T,
@@ -55,20 +139,19 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
                              "Visit"))
 
     # check#1: See if timestamp was entered
-    if (dim(mer_anno)[1] == 0) {
+    if (all(is.na(mer_anno$Difference))) {
       
-      warning(paste(substr(anno_file_list[i], 6, 11), "annotation file does not have an entry in Timestamps.csv",
-                    sep = " "))
+      warning("\n",
+              "\n",
+              file_name, "annotation file does not have an entry in Timestamps.csv")
       
     } else {
     
       # add diff to times
-      mer_anno$NEWstarttime <- NA
       mer_anno <- mer_anno %>%
         mutate(NEWstarttime = if_else(!is.na(Difference),
                                       startTime + Difference,
                                       startTime))
-      mer_anno$NEWendtime <- NA
       mer_anno <- mer_anno %>%
         mutate(NEWendtime = if_else(!is.na(Difference),
                                     endTime + Difference,
@@ -89,15 +172,15 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
       # sbs
       n <- nrow(mer_anno)
       l <- lapply(1:n, sbs)
-      sbs_anno <- Reduce(rbind, l) %>% 
-        pad()
+      sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
+        pad())
       
       # changing NA's to transition;gap
       levels <- levels(sbs_anno$annotation)
-      levels[length(levels) + 1] <- "transition;gap"
+      levels[length(levels) + 1] <- "gap"
       sbs_anno$annotation <- factor(sbs_anno$annotation,
                                     levels = levels)
-      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
+      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "gap"
       
       # on off times
       on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
@@ -107,17 +190,17 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
       #	label off times
       sbs_anno$off <- 1
       n <- dim(sbs_anno)[1]
-      class(sbs_anno$time)
-      inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
-      sbs_anno$off[inds] <- 0
+      index <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+      sbs_anno$off[index] <- 0
       
       # check#2: see if off times were actually labeled
       inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
       i <- length(inds_worn)
       if(i == 0) {
         
-        warning(paste(substr(anno_file_list[i], 6, 11), "timestamp or on_off_log entry incorrect",
-                      sep = " "))
+        warning("\n",
+                "\n",
+                file_name, "timestamp or on_off_log entry incorrect")
         
       } else {
         
@@ -131,7 +214,8 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
         vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
         vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
         vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
-        vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
+        vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
+        vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
         vis_anno <-vis_anno[, c("ID",
                                 "Visit",
                                 "time",
@@ -139,7 +223,7 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
         
         # write table
         write.table(vis_anno,
-                    file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
+                    file = paste0("./3_data/processed/anno_clean/", file_name, ".csv"),
                     sep = ",",
                     row.names = F)
       }
@@ -147,7 +231,10 @@ process_anno <- function(anno_file_list, corr_timstamps_path) {
   }
 }
 
-process_ap <- function(ap_file_list) {
+
+
+process_ap <- function(ap_file_list,
+                       on_off_log) {
   
   # create clean ap files
   for (i in seq_along(ap_file_list)) {
@@ -365,6 +452,8 @@ process_ap <- function(ap_file_list) {
   }
 }
 
+
+
 merge_anno_ap <- function(list_anno) {
 
   for (i in seq_along(list_anno)) {
@@ -374,7 +463,7 @@ merge_anno_ap <- function(list_anno) {
     vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", list_anno[i]),
                          col_names = T)
     l <- nrow(vis_anno)
-    id_visit <- substr(list_anno[i], 1, 6)
+    id_visit <- substr(list_anno[i], 6, 11)
     vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
                        col_names = T)
     
@@ -400,19 +489,66 @@ merge_anno_ap <- function(list_anno) {
   }
 }
 
+
+
 analysis_avsa <- function(merged_list) {
   
   counter <- 1
   
   for (i in seq_along(merged_list)) {
 
-    print(merged_list[i])
+    file_name <- merged_list[i]
     
-    data_merged <- read_csv(file = paste0("./3_data/analysis/merged_anno_ap/",merged_list[i]),
-                            col_names = T)
-    data_event <- data_merged[data_merged$annotation != 3, ]
+    message("\nPreparing ", file_name, "...")
     
-    # fixpoint#1: if on file does not have a posture
+    # read in merged file
+    data_merged <- suppressMessages(vroom(file = paste0("./3_data/analysis/merged_anno_ap/",
+                                                        file_name),
+                                          delim = ","))
+    
+    # remove gaps to create trans and both gaps/transitions to creat event
+    data_trans <- data_merged[data_merged$annotation != 3, ]
+    data_event <- data_trans[data_trans$annotation != 4, ]
+    
+    # fixpoint#1: if a file does not have a posture
+    data_trans$annotation <- as.factor(data_trans$annotation)
+    data_trans$ap_posture <- as.factor((data_trans$ap_posture))
+    
+    anno_levels <- levels(data_trans$annotation)
+    ap_levels <- levels(data_trans$ap_posture)
+    
+    if (length(anno_levels) < 4 || length(ap_levels) < 4) {
+      
+      event_levels <- union(anno_levels, ap_levels) %>% 
+        as.integer() %>% 
+        sort() %>% 
+        paste()
+      
+      # if event_levels has all postures
+      if (all(c("0", "1", "2", "4") %in% event_levels)) {
+        
+        data_trans$annotation <- factor(data_trans$annotation,
+                                        levels = event_levels)
+        data_trans$ap_posture<- factor(data_trans$ap_posture,
+                                       levels = event_levels)
+        
+        # if there is no sitting in both anno and ap
+      } else if (all(c("1", "2", "4") %in% event_levels)) {
+        
+        event_levels[length(event_levels) + 1] <- "0"
+        event_levels <- as.integer(event_levels) %>% 
+          sort() %>% 
+          paste()
+        
+        data_trans$annotation <- factor(data_trans$annotation,
+                                        levels = event_levels)
+        data_trans$ap_posture<- factor(data_trans$ap_posture,
+                                       levels = event_levels)
+        
+      } 
+    }    
+    
+    # fixpoint for event
     data_event$annotation <- as.factor(data_event$annotation)
     data_event$ap_posture <- as.factor((data_event$ap_posture))
     
@@ -426,40 +562,53 @@ analysis_avsa <- function(merged_list) {
         sort() %>% 
         paste()
       
-      if (all(event_levels == c("0", "1", "2"))) {
+      # if event_levels has all postures
+      if (all(c("0", "1", "2") %in% event_levels)) {
         
         data_event$annotation <- factor(data_event$annotation,
-                                        levels = event_levels)
+                                              levels = event_levels)
         data_event$ap_posture<- factor(data_event$ap_posture,
-                                       levels = event_levels)
+                                             levels = event_levels)
         
-      } else if (all(event_levels == c("1", "2"))) {
+        # if there is no sitting in both anno and ap
+      } else if (all(c("1", "2") %in% event_levels)) {
         
-        event_levels[length(event_levels) + 1] <- "3"
+        event_levels[length(event_levels) + 1] <- "0"
+        event_levels <- as.integer(event_levels) %>% 
+          sort() %>% 
+          paste()
+        
         data_event$annotation <- factor(data_event$annotation,
-                                        levels = event_levels)
+                                              levels = event_levels)
         data_event$ap_posture<- factor(data_event$ap_posture,
-                                       levels = event_levels)
+                                             levels = event_levels)
         
       } 
     }    
+      
     # times: visit, event, transition (all converted to minutes)
     time_visit <- nrow(data_merged) %>% #
       as.integer()
     time_visit <- time_visit/60
     
-    time_event <- data_merged[data_merged$annotation != 3, ] %>% #
+    time_event <- data_event %>% #
       nrow(.) %>% 
       as.integer()
     time_event <- time_event/60
     
-    time_trans <- data_merged[data_merged$annotation == 3, ] %>% #
+    time_trans <- data_merged[data_merged$annotation == 4, ] %>% #
       nrow(.) %>% 
       as.integer()
     time_trans <- time_trans/60
     
+    time_gap <- data_merged[data_merged$annotation == 3, ] %>% #
+      nrow(.) %>% 
+      as.integer()
+    time_gap <- time_gap/60
+    
     # check to see event and transition equal data_merged. dont include in function
-    time_event + time_trans == nrow(data_merged)/60
+    all.equal(time_event + time_gap + time_trans,
+              nrow(data_merged)/60)
     
     # times: posture, agree & misclassification from confusion matrix
     time_matr_event <- table(data_event$ap_posture, data_event$annotation) # rows = ap
@@ -475,23 +624,31 @@ analysis_avsa <- function(merged_list) {
     time_anno_sta <- time_matr_event[4, 2]
     time_anno_mov <- time_matr_event[4, 3]
     
-    time_agre_ss <- time_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
-    time_miss_st <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
+    time_agre_ss <- time_matr_event[1, 1] # last two letters: first is ap, second is anno, d = stand, t = trans
+    time_miss_sd <- time_matr_event[1, 2] # "anno misclassified ap sitting as standing"
     time_miss_sm <- time_matr_event[1, 3] # "anno misclassified ap sitting as movement"
     
-    time_miss_ts <- time_matr_event[2, 1]
-    time_agre_tt <- time_matr_event[2, 2] # "anno agrees with ap standing"
-    time_miss_tm <- time_matr_event[2, 3]
+    time_miss_ds <- time_matr_event[2, 1]
+    time_agre_dd <- time_matr_event[2, 2] # "anno agrees with ap standing"
+    time_miss_dm <- time_matr_event[2, 3]
     
     time_miss_ms <- time_matr_event[3, 1]
-    time_miss_mt <- time_matr_event[3, 2]
+    time_miss_md <- time_matr_event[3, 2]
     time_agre_mm <- time_matr_event[3, 3]
+
+    time_matr_trans <- (table(data_trans$ap_posture, data_trans$annotation) %>% 
+      addmargins())/60
+    time_matr_trans
+    time_miss_st <- time_matr_trans[1, 4] # "transition time when there is ap sitting"
+    time_miss_dt <- time_matr_trans[2, 4]
+    time_miss_mt <- time_matr_trans[3, 4]
     
-    time_agre_total <- time_agre_ss + time_agre_tt + time_agre_mm 
+    time_agre_total <- time_agre_ss + time_agre_dd + time_agre_mm 
     
     # check
     sum(data_merged$annotation == data_merged$ap_posture)/60 # TRUE = agree, adds all sec they agree
-    time_agre_total == sum(data_merged$annotation == data_merged$ap_posture)/60
+    all.equal(time_agre_total,
+              sum(data_merged$annotation == data_merged$ap_posture)/60)
     
     # time table
     id <- data_merged$ID[1]
@@ -501,7 +658,10 @@ analysis_avsa <- function(merged_list) {
                                       Visit          = visit,
                                       visit_time     = time_visit,
                                       event_time     = time_event,
+                                      gap_time       = time_gap,
                                       trans_time     = time_trans,
+                                      total_agree    = time_agre_total,
+                                      event_agree    = time_agre_total,
                                       sit_ap         = time_ap_sit,
                                       sit_anno       = time_anno_sit,
                                       stand_ap       = time_ap_sta,
@@ -509,19 +669,22 @@ analysis_avsa <- function(merged_list) {
                                       move_ap        = time_ap_mov,
                                       move_anno      = time_anno_mov,
                                       sit_agree      = time_agre_ss,
-                                      stand_agree    = time_agre_tt,
+                                      stand_agree    = time_agre_dd,
                                       move_agree     = time_agre_mm,
-                                      sit_mis_stand  = time_miss_st,
+                                      sit_trans      = time_miss_st,
+                                      stand_trans    = time_miss_dt,
+                                      move_trans     = time_miss_mt,
+                                      sit_mis_stand  = time_miss_sd,
                                       sit_mis_move   = time_miss_sm,
-                                      stand_mis_sit  = time_miss_ts,
-                                      stand_mis_move = time_miss_tm,
+                                      stand_mis_sit  = time_miss_ds,
+                                      stand_mis_move = time_miss_dm,
                                       move_mis_sit   = time_miss_ms,
-                                      move_mis_stand = time_miss_mt)
-    
+                                      move_mis_stand = time_miss_md)
     
     # percentages: event, transition, total agreement and event agreement
     perc_event <- time_event/time_visit*100 #
     perc_trans <- time_trans/time_visit*100
+    perc_gap   <- time_gap/time_visit*100
     perc_agre_total <-  time_agre_total/time_visit*100 #
     perc_agre_event <-  time_agre_total/time_event*100 #
     
@@ -542,70 +705,82 @@ analysis_avsa <- function(merged_list) {
     perc_anno_sit <- time_anno_sit/time_event*100
     perc_anno_sta <- time_anno_sta/time_event*100
     perc_anno_mov <- time_anno_mov/time_event*100
-    perc_anno_sit + perc_anno_sta + perc_anno_mov == 100
+    all.equal(perc_anno_sit + perc_anno_sta + perc_anno_mov,
+              100)
     
-    perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, t = stand
-    perc_miss_st <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+    perc_agre_ss <- perc_matr_event[1, 1] # last two letters: firs is ap, second is anno, d = stand, t = trans
+    perc_miss_sd <- perc_matr_event[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
     perc_miss_sm <- perc_matr_event[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+
     
-    perc_miss_ts <- perc_matr_event[2, 1]
-    perc_agre_tt <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
-    perc_miss_tm <- perc_matr_event[2, 3]
+    perc_miss_ds <- perc_matr_event[2, 1]
+    perc_agre_dd <- perc_matr_event[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+    perc_miss_dm <- perc_matr_event[2, 3]
+
     
     perc_miss_ms <- perc_matr_event[3, 1]
-    perc_miss_mt <- perc_matr_event[3, 2]
+    perc_miss_md <- perc_matr_event[3, 2]
     perc_agre_mm <- perc_matr_event[3, 3]
+
+    perc_matr_trans <- (time_matr_trans[, 4]/time_matr_trans[, 5])*100
+    perc_miss_st <- perc_matr_trans[1] # "##% of TOTAL (non-event) ap sit time classified as transition"
+    perc_miss_dt <- perc_matr_trans[2]
+    perc_miss_mt <- perc_matr_trans[3]
     
     # percentage table
     table_analysis_percentage <- data.frame(ID             = id,
                                             Visit          = visit,
-                                            perc_event     = perc_event,
-                                            perc_trans     = perc_trans,
+                                            event_time     = perc_event,
+                                            gap_time       = perc_gap,
+                                            trans_time     = perc_trans,
+                                            total_agree    = perc_agre_total,
+                                            event_agree    = perc_agre_event,
                                             sit_ap         = perc_ap_sit,
                                             sit_anno       = perc_anno_sit,
                                             stand_ap       = perc_ap_sta,
                                             stand_anno     = perc_anno_sta,
                                             move_ap        = perc_ap_mov,
                                             move_anno      = perc_anno_mov,
-                                            total_agree    = perc_agre_total,
-                                            event_agree    = perc_agre_event,
                                             sit_agree      = perc_agre_ss,
-                                            stand_agree    = perc_agre_tt,
+                                            stand_agree    = perc_agre_dd,
                                             move_agree     = perc_agre_mm,
-                                            sit_mis_stand  = perc_miss_st,
+                                            sit_trans      = perc_miss_st,
+                                            stand_trans    = perc_miss_dt,
+                                            move_trans     = perc_miss_mt,
+                                            sit_mis_stand  = perc_miss_sd,
                                             sit_mis_move   = perc_miss_sm,
-                                            stand_mis_sit  = perc_miss_ts,
-                                            stand_mis_move = perc_miss_tm,
+                                            stand_mis_sit  = perc_miss_ds,
+                                            stand_mis_move = perc_miss_dm,
                                             move_mis_sit   = perc_miss_ms,
-                                            move_mis_stand = perc_miss_mt)
+                                            move_mis_stand = perc_miss_md)
     
     
     
     if (counter == 1) {
       
-      write_csv(table_analysis_time,
-                path = "./3_data/analysis/table_analysis_time.csv",
-                col_names = T,
-                append = F)
+      vroom_write(table_analysis_time,
+                  path = "./3_data/analysis/table_analysis_time.csv",
+                  delim = ",",
+                  append = F)
       
-      write_csv(table_analysis_percentage,
-                path = "./3_data/analysis/table_analysis_percentage.csv",
-                col_names = T,
-                append = F)
+      vroom_write(table_analysis_percentage,
+                  path = "./3_data/analysis/table_analysis_percentage.csv",
+                  delim = ",",
+                  append = F)
       
     }
     
     if (counter > 1) {
       
-      write_csv(table_analysis_time,
-                path = "./3_data/analysis/table_analysis_time.csv",
-                col_names = F,
-                append = T)
+      vroom_write(table_analysis_time,
+                  path = "./3_data/analysis/table_analysis_time.csv",
+                  delim = ",",
+                  append = T)
       
-      write_csv(table_analysis_percentage,
-                path = "./3_data/analysis/table_analysis_percentage.csv",
-                col_names = F,
-                append = T)
+      vroom_write(table_analysis_percentage,
+                  path = "./3_data/analysis/table_analysis_percentage.csv",
+                  delim = ",",
+                  append = T)
       
     }
     
@@ -614,3 +789,195 @@ analysis_avsa <- function(merged_list) {
   }
 }
 
+
+
+create_visit_summary <- function() {
+
+  data_time <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_time.csv",
+                                      delim = ","))
+  data_percentage <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_percentage.csv",
+                                            delim = ","))
+  
+  # changing Na to 0
+  data_time[is.na(data_time)] <- 0
+  data_percentage[is.na(data_percentage)] <- 0
+  
+  # means and sd
+  colSd <- function(x, na.rm = T) {
+    
+    if (na.rm) {
+      
+      n <- colSums(!is.na(x))
+      
+    } else {
+      
+      n <- nrow(x)
+      
+    }
+    
+    colVar <- colMeans(x*x, na.rm = na.rm) - (colMeans(x, na.rm = na.rm))^2
+    
+    return(sqrt(colVar * n/(n-1)))
+    
+  }
+  
+  avg_times <- colMeans(data_time)
+  sd_times <- colSd(data_time)
+  
+  avg_percs <- colMeans(data_percentage)
+  sd_percs <- colSd(data_percentage)
+  
+  # table of time and perc
+  tbl_sum_vis_time <- bind_rows(avg_times,
+                                sd_times) %>% 
+    as.data.frame()
+  
+  tbl_sum_vis_perc <- bind_rows(avg_percs,
+                                sd_percs) %>% 
+    as.data.frame()
+  
+  # merge table 
+  tbl_sum_vis <- bind_rows(tbl_sum_vis_time,
+                           tbl_sum_vis_perc) %>% 
+    t() %>% 
+    as.data.frame()
+  
+  # clean
+  colnames(tbl_sum_vis) <- c("mean_min",
+                             "sd_min",
+                             "mean_perc",
+                             "sd_perc")
+  
+  tbl_sum_vis <- tbl_sum_vis[-(1:2), ]
+  
+  tbl_sum_vis <- round(tbl_sum_vis, 1)
+  
+  tbl_sum_vis <- rownames_to_column(tbl_sum_vis,
+                                    var = "variable")
+  comments <- c(NA,
+                "% of visit time", "% of visit time", "% of visit time", "% of visit time",
+                "% of event time", "% of event time", "% of event time", "% of event time",
+                "% of event time", "% of event time", "% of event time", "% of event time",
+                "% of event time", "% of event time", "% of visit time", "% of visit time",
+                "% of visit time", "% of event time", "% of event time","% of event time",
+                "% of event time", "% of event time", "% of event time")
+  
+  tbl_sum_vis$comment <- comments
+  
+  # write
+  vroom_write(tbl_sum_vis,
+              path = "./4_results/summary_visit.csv",
+              delim = ",")
+  write_rds(tbl_sum_vis,
+            path = "./4_results/summary_visit.rds",
+            compress = "none")
+  
+  assign("tbl_sum_vis",
+         tbl_sum_vis,
+         envir = .GlobalEnv)
+  
+}
+
+
+
+create_posture_summary <- function() {
+  
+  data_time <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_time.csv",
+                                      delim = ","))
+  
+  tbl_sum_pos_time <- data.frame(posture = c("sit",
+                                             "stand",
+                                             "move"))
+  
+  # raw means:
+  tbl_sum_pos_time$ap_mean  <- c(mean(data_time$sit_ap),
+                                 mean(data_time$stand_ap),
+                                 mean(data_time$move_ap))
+  tbl_sum_pos_time$ap_sd    <- c(sd(data_time$sit_ap),
+                                 sd(data_time$stand_ap),
+                                 sd(data_time$move_ap))
+  tbl_sum_pos_time$img_mean <- c(mean(data_time$sit_anno),
+                                 mean(data_time$stand_anno),
+                                 mean(data_time$move_anno))
+  tbl_sum_pos_time$img_sd   <- c(sd(data_time$sit_anno),
+                                 sd(data_time$stand_anno),
+                                 sd(data_time$move_anno))
+  
+  # linear mixed effects model: bias~b0 + b_i + e_ij
+  sitmodel <- lmer(sit_anno - sit_ap ~ 1 + (1|ID),
+                   data = data_time)
+  standmodel <- lmer(stand_anno - stand_ap ~ 1 + (1|ID),
+                     data = data_time)
+  movemodel <- lmer(move_anno - move_ap ~ 1 + (1|ID),
+                    data = data_time)
+  
+  # biases are estimated from model
+  tbl_sum_pos_time$bias <- c(fixef(sitmodel),
+                             fixef(standmodel),
+                             fixef(movemodel))
+  
+  # se is "unexplained variability" in the biases
+  tbl_sum_pos_time$SE <- c(as.data.frame(VarCorr(sitmodel))[2,5],
+                           as.data.frame(VarCorr(standmodel))[2,5],
+                           as.data.frame(VarCorr(movemodel))[2,5])
+  
+  # approximate 95% CIs
+  tbl_sum_pos_time$upper_95_bias <- tbl_sum_pos_time$lower_95_bias <- NA
+  tbl_sum_pos_time[,8:9] <- suppressMessages(rbind(confint(sitmodel,3),
+                                                   confint(standmodel,3),
+                                                   confint(movemodel,3)))
+  
+  # transition time when ap said a posture
+  tbl_sum_pos_time$img_trans_mean <- c(mean(data_time$sit_trans),
+                                       mean(data_time$stand_trans),
+                                       mean(data_time$move_trans))
+  
+  # misclassifications
+  tbl_sum_pos_time$img_miss_sit_mean   <- c(0,
+                                            mean(data_time$stand_mis_sit),
+                                            mean(data_time$move_mis_sit))
+  
+  tbl_sum_pos_time$img_miss_stand_mean <- c(mean(data_time$sit_mis_stand),
+                                            0,
+                                            mean(data_time$move_mis_stand))
+  
+  tbl_sum_pos_time$img_miss_move_mean  <- c(mean(data_time$sit_mis_move),
+                                            mean(data_time$stand_mis_move),
+                                            0)
+  
+  # % sum table
+  tbl_sum_pos_perc <- tbl_sum_pos_time
+  
+  tbl_sum_pos_perc$bias          <- (tbl_sum_pos_time$bias / tbl_sum_pos_time$ap_mean)*100
+  tbl_sum_pos_perc$SE            <- (tbl_sum_pos_time$SE/tbl_sum_pos_time$ap_mean)*100
+  tbl_sum_pos_perc$lower_95_bias <- (tbl_sum_pos_time$lower_95_bias/tbl_sum_pos_time$ap_mean)*100
+  tbl_sum_pos_perc$upper_95_bias <- (tbl_sum_pos_time$upper_95_bias/tbl_sum_pos_time$ap_mean)*100
+  
+  # round to 1 digit, arbitrarily
+  tbl_sum_pos_time[,-1] <- round(tbl_sum_pos_time[,-1], 1)
+  tbl_sum_pos_perc[,-1] <- round(tbl_sum_pos_perc[,-1], 1)
+  
+  # output summary posture tables
+  
+  write_rds(tbl_sum_pos_time,
+            path = "./4_results/summary_posture_time.rds",
+            compress = "none")
+  write_rds(tbl_sum_pos_perc,
+            path = "./4_results/summary_posture_perc.rds",
+            compress = "none")
+  vroom_write(tbl_sum_pos_time,
+              path = "./4_results/summary_posture_mins.csv",
+              delim = ",")
+  vroom_write(tbl_sum_pos_perc,
+              path = "./4_results/summary_posture_perc.csv",
+              delim = ",")
+  
+  assign("tbl_sum_pos_time",
+         tbl_sum_pos_time,
+         envir = .GlobalEnv)
+  
+  assign("tbl_sum_pos_perc",
+         tbl_sum_pos_perc,
+         envir = .GlobalEnv)
+  
+}
