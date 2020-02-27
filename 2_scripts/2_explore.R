@@ -3633,6 +3633,142 @@ tbl_miss_time
 tbl_miss_perc
 
 
+
+
+# figures & tables --------------------------------------------------------
+
+tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
+
+# read in only classifications
+graph <- tbl_miss_time[ , -which(colnames(tbl_miss_time) %in% c("AP_Total"))]
+
+# rename IMG to correct
+colnames(graph)[2] <- "Correct"
+
+# change table into variables that represent x, y, other
+graph <- graph %>% 
+  melt(id.vars = "Posture")
+
+# clean
+colnames(graph)[2] <- "Classification"
+
+graph <- graph[graph$value != 0, ]
+
+graph$Posture <- factor(graph$Posture,
+                        levels = c("Sit",
+                                   "Stand",
+                                   "Move"))
+graph
+
+# plot
+ggplot(data = graph) +
+  geom_bar(mapping = aes(x = Posture,
+                         y = value,
+                         fill = Classification),
+           stat = "identity") +
+  geom_text(data = tbl_miss_time,
+            mapping = aes(x = Posture,
+                          y = AP_Total,
+                          label = paste(AP_Total, "mins")),
+            vjust = -0.5) +
+  geom_text(mapping = aes(x = Posture,
+                          y = value,
+                          fill = Classification,
+                          label = paste(value, "mins")),
+            position = position_stack(vjust = 0.5)) +
+  labs(title = "Proportion of Total AP estimates correctly classified by IMGs",
+       x = "Posture",
+       y = "Minutes") +
+  theme(plot.title = element_text(lineheight = 1,
+                                  hjust = .5),
+        text = element_text(size = 15)) +
+  ggtitle("Proportion of Total AP estimates correctly classified by IMGs") +
+  scale_fill_manual(values = c("#3399FF",
+                               "#CC3333",
+                               "#9999FF",
+                               "#FF9933",
+                               "#99CC99"))
+scale_fill_brewer(palette = "Set1",
+                  direction = -1)
+
+# figure_miss_percent, save as ???
+tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
+
+# read in only classifications
+graph <- tbl_miss_perc[ , -which(colnames(tbl_miss_perc) %in% c("AP_Total"))]
+
+# rename IMG to correct
+colnames(graph)[2] <- "Correct"
+
+# change table into variables that represent x, y, other
+graph <- graph %>% 
+  melt(id.vars = "Posture")
+
+# clean
+colnames(graph)[2] <- "Classification"
+
+graph <- graph[graph$value != 0, ]
+
+graph$Posture <- factor(graph$Posture,
+                        levels = c("Sit",
+                                   "Stand",
+                                   "Move"))
+
+# label
+lbl <- tbl_miss_perc
+lbl$label <- lbl$AP_Total/lbl$AP_Total*100
+
+
+
+ggplot(data = graph) +
+  geom_bar(mapping = aes(x = Posture,
+                         y = value,
+                         fill = Classification),
+           stat = "identity") +
+  geom_text(data = lbl,
+            mapping = aes(x = Posture,
+                          y = label,
+                          label = paste(AP_Total, "mins")),
+            vjust = -0.5) +
+  geom_text(mapping = aes(x = Posture,
+                          y = value,
+                          fill = Classification,
+                          label = paste0(value, "%")),
+            position = position_stack(vjust = 0.5)) +
+  labs(title = "Proportion of Total AP estimates correctly classified by IMGs",
+       x = "Posture",
+       y = "Minutes") +
+  theme(plot.title = element_text(lineheight = 1,
+                                  hjust = .5),
+        text = element_text(size = 15)) +
+  ggtitle("Proportion of Total AP estimates correctly classified by IMGs") +
+  scale_fill_manual(values = c("#3399FF",
+                               "#FF6666",
+                               "#9999FF",
+                               "#FF9933",
+                               "#99CC99"))
+
+ggplot(data = graph) +
+  geom_bar(mapping = aes(x = Posture,
+                         y = value,
+                         fill = Classification),
+           stat = "identity",
+           position = position_fill()) +
+  scale_y_continuous(labels = percent) +
+  labs(title = "Proportion of Total AP estimates correctly classified by IMGs",
+       x = "Posture",
+       y = "Percentage") +
+  theme(plot.title = element_text(lineheight = 1,
+                                  hjust = .5),
+        text = element_text(size = 15)) +
+  ggtitle("Proportion of Total AP estimates correctly classified by IMGs")
+theme_bw()
+scale_fill_brewer(palette = 1)
+?scale_fill_brewer()
+scale_y_continuous(labels = percent)
+
+
+
 # other -------------------------------------------------------------------
 
 # capitalizing

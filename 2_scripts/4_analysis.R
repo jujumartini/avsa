@@ -24,6 +24,7 @@ create_visit_summary()
 create_bias_table()
 
 
+
 # misclassification -------------------------------------------------------
 
 create_miss_table()
@@ -32,10 +33,8 @@ create_miss_table()
 
 # Figures: Plots ----------------------------------------------------------
 
-tbl_bias_time <- read_rds(path = "./4_results/summary_posture_time.rds")
-tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
-
 # figure_bias_minutes, save as 800 by 500 pixels
+tbl_bias_time <- read_rds(path = "./4_results/summary_posture_time.rds")
 {
   
   plot(1:3,
@@ -89,7 +88,9 @@ tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
 }
 
 # figure_bias_percent, save as 800 by 500 pixels
+tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
 {
+  
   plot(1:3,
        1:3,
        xlab = "",
@@ -140,18 +141,129 @@ tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
   }
 }
 
+# figure_miss_minutes, save as 850 by 600 (reshape2)
+tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
+{
+  
+  # read in only classifications
+  graph <- tbl_miss_time[ , -which(colnames(tbl_miss_time) %in% c("AP_Total"))]
+  
+  # rename IMG to correct
+  colnames(graph)[2] <- "Correct"
+  
+  # change table into variables that represent x, y, other
+  graph <- graph %>% 
+    melt(id.vars = "Posture")
+  
+  # clean
+  colnames(graph)[2] <- "Classification"
+  
+  graph <- graph[graph$value != 0, ]
+  
+  graph$Posture <- factor(graph$Posture,
+                          levels = c("Sit",
+                                     "Stand",
+                                     "Move"))
+  
+  # plot
+  ggplot(data = graph) +
+    geom_bar(mapping = aes(x = Posture,
+                           y = value,
+                           fill = Classification),
+             stat = "identity") +
+    geom_text(data = tbl_miss_time,
+              mapping = aes(x = Posture,
+                            y = AP_Total,
+                            label = paste(AP_Total, "mins")),
+              vjust = -0.5) +
+    geom_text(mapping = aes(x = Posture,
+                            y = value,
+                            fill = Classification,
+                            label = paste(value, "mins")),
+              position = position_stack(vjust = 0.5)) +
+    theme(plot.title = element_text(lineheight = 1,
+                                    hjust = .5),
+          text = element_text(size = 15)) +
+    labs(title = "Total AP estimates classified by IMGs",
+         x = "Posture",
+         y = "Minutes") +
+    scale_fill_manual(values = c("#3399FF",
+                                 "#FF6666",
+                                 "#9999FF",
+                                 "#FF9933",
+                                 "#99CC99"))
+  
+}
+
+# figure_miss_percent, save as 800 by 600 (reshape2)
+tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
+{
+  
+  # read in only classifications
+  graph <- tbl_miss_perc[ , -which(colnames(tbl_miss_perc) %in% c("AP_Total"))]
+  
+  # rename IMG to correct
+  colnames(graph)[2] <- "Correct"
+  
+  # change table into variables that represent x, y, other
+  graph <- graph %>% 
+    melt(id.vars = "Posture")
+  
+  # clean
+  colnames(graph)[2] <- "Classification"
+  
+  graph <- graph[graph$value != 0, ]
+  
+  graph$Posture <- factor(graph$Posture,
+                          levels = c("Sit",
+                                     "Stand",
+                                     "Move"))
+  
+  # label
+  lbl <- tbl_miss_perc
+  lbl$label <- lbl$AP_Total/lbl$AP_Total*100
+  
+  # plot
+  ggplot(data = graph) +
+    geom_bar(mapping = aes(x = Posture,
+                           y = value,
+                           fill = Classification),
+             stat = "identity") +
+    geom_text(data = lbl,
+              mapping = aes(x = Posture,
+                            y = label,
+                            label = paste(AP_Total, "mins")),
+              vjust = -0.5) +
+    geom_text(mapping = aes(x = Posture,
+                            y = value,
+                            fill = Classification,
+                            label = paste0(value, "%")),
+              position = position_stack(vjust = 0.5)) +
+    theme(plot.title = element_text(lineheight = 1,
+                                    hjust = .5),
+          text = element_text(size = 15)) +
+    labs(title = "Proportion of Total AP estimates classified by IMGs",
+         x = "Posture",
+         y = "% of Total AP Estimates") +
+    scale_fill_manual(values = c("#3399FF",
+                                 "#FF6666",
+                                 "#9999FF",
+                                 "#FF9933",
+                                 "#99CC99"))
+  
+}
+
+
+
 # Figures: Tables ---------------------------------------------------------
 
-tbl_sum_vis <- read_rds(path = "./4_results/summary_visit.rds")
-tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
-tbl_bias_perc <- read_rds(path = "./4_results/posture_bias_perc.rds")
-tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
-tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
-
 # table_bias_minutes, save as 650 by 175 pixels
+tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
 {
-  # merge mean and sd columns, /u00b1 is plus/minus symbol
+  
   tbl <- tbl_bias_time
+  
+  # merge mean and sd columns, /u00b1 is plus/minus symbol
   tbl$AP <- paste(tbl$AP_mean,
                   tbl$AP_sd,
                   sep = " \u00b1 ")
@@ -186,9 +298,12 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
 }
 
 # table_bias_percent, save as 650 by 175 pixels
+tbl_bias_perc <- read_rds(path = "./4_results/posture_bias_perc.rds")
 {
-  # merge mean and sd columns, /u00b1 is plus/minus symbol
+  
   tbl <- tbl_bias_perc
+  
+  # merge mean and sd columns, /u00b1 is plus/minus symbol
   tbl$AP <- paste(tbl$AP_mean,
                   tbl$AP_sd,
                   sep = " \u00b1 ")
@@ -222,10 +337,10 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
   colnames(tbl) <- c("Posture",
                      "AP min \u00b1 SD",
                      "IMG min \u00b1 SD",
-                     "Bias",
-                     "SE",
-                     "Lower 95% CI",
-                     "Higher 95% CI")
+                     "% Bias",
+                     "% SE",
+                     "Lower 95% CI %",
+                     "Higher 95% CI %")
 
   # format
   formattable(tbl,
@@ -235,64 +350,64 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
   
 }
 
-# table_miss_minutes, save as 650 by 175 pixels
-
-
-
-# table_miss_percent, save as 650 by 175 pixels
-formattable(tbl_miss_time,
-            list(Posture = formatter("span",
-                                     style = x ~ style(font.weight = "bold"))),
-            align = c("l", "c", "c", "c", "c", "c", "c"))
-
-
-# percent
-tbl_bias_perc <- tbl_sum_pos_perc[, -c(4, 5, 10, 11, 12, 13)]
-tbl_miss_perc <- tbl_sum_pos_perc[, c(1, 4, 5, 10, 11, 12, 13)]
-
-# capitalizing
-substr(colnames(tbl_bias_perc), 1, 1) <- toupper(substr(colnames(tbl_bias_perc), 1, 1))
-substr(colnames(tbl_bias_perc)[2:3], 1, 2) <- toupper(substr(colnames(tbl_bias_perc)[2:3], 1, 2))
-
-tbl_bias_perc$Posture <- as.character(tbl_bias_perc$Posture)
-substr(tbl_bias_perc$Posture, 1, 1) <- toupper(substr(tbl_bias_perc$Posture, 1, 1))
-
-substr(colnames(tbl_miss_perc), 1, 1) <- toupper(substr(colnames(tbl_miss_perc), 1, 1))
-substr(colnames(tbl_miss_perc)[2:7], 1, 3) <- toupper(substr(colnames(tbl_miss_perc)[2:7], 1, 3))
-
-tbl_miss_perc$Posture <- as.character(tbl_miss_perc$Posture)
-substr(tbl_miss_perc$Posture, 1, 1) <- toupper(substr(tbl_miss_perc$Posture, 1, 1))
-
-# format
-formattable(tbl_bias_perc,
-            list(Posture = formatter("span",
-                                     style = x ~ style(font.weight = "bold"))),
-            align = c("l", "c", "c", "c", "c", "c", "c"))
-
-formattable(tbl_miss_perc,
-            list(Posture = formatter("span",
-                                     style = x ~ style(font.weight = "bold"))),
-            align = c("l", "c", "c", "c", "c", "c", "c"))
-
-# misclassification
-list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv",
-                          full.names = T)
-
-merged_all <- suppressMessages(lapply(list_merged,
-                     vroom,
-                     delim = ","))
-merged_all <- bind_rows(merged_all)
-merged_all <- merged_all[merged_all$annotation != 3, ]
-sitting_all <- merged_all[merged_all$ap_posture == 0,]
-total_posture <- merged_all %>% 
-  group_by(ID, Visit, ap_posture, annotation) %>% 
-  summarise(total_ap = sum(ap_posture),
-            total_img = sum(annotation))
-total_posture <- total_posture/60
-
+# table_miss_minutes, save as 600 by 175 pixels
+tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
+{
   
-time_matr_all <- table(merged_all$ap_posture,
-                       merged_all$annotation)
-time_matr_all <- addmargins(time_matr_all)
-time_matr_all <- time_matr_all/60
-time_matr_all
+  tbl <- tbl_miss_time
+  
+  # clean
+  colnames(tbl) <- c("Posture",
+                     "Total AP min",
+                     "Correct",
+                     "Transition",
+                     "Sit",
+                     "Stand",
+                     "Move")
+  
+  # format
+  formattable(tbl,
+              list(Posture = formatter("span",
+                                       style = x ~ style(font.weight = "bold"))),
+              align = c("l", "c", "c", "c", "c", "c", "c"))
+  
+}
+
+# table_miss_percent, save as 600 by 175 pixels
+tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
+{
+  
+  tbl <- tbl_miss_perc
+  
+  # add percent symbol
+  tbl$IMG <- paste0(tbl$IMG,
+                    c("%", "%", "%"))
+  
+  tbl$Transition <- paste0(tbl$Transition,
+                           c("%", "%", "%"))
+  
+  tbl$Sit <- paste0(tbl$Sit,
+                    c("%", "%", "%"))
+  
+  tbl$Stand <- paste0(tbl$Stand,
+                      c("%", "%", "%"))
+  
+  tbl$Move <- paste0(tbl$Move,
+                     c("%", "%", "%"))
+  
+  # clean
+  colnames(tbl) <- c("Posture",
+                     "Total AP min",
+                     "% Correct",
+                     "% Transition",
+                     "% Sit",
+                     "% Stand",
+                     "% Move")
+  
+  # format
+  formattable(tbl,
+              list("Posture" = formatter("span",
+                                         style = x ~ style(font.weight = "bold"))),
+              align = c("l", "c", "c", "c", "c", "c", "c"))
+  
+}
