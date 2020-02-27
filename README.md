@@ -33,6 +33,10 @@ v2.0.0
   -incorported vroom function into reading and writing files  
   -made reading timestamps, on_off_log, summary files into their own functions  
   
+v2.0.1
+ -seperated posture table into a bias and misclassifcation table
+ -created sections of code for outputting figures (graphs and tables)
+  
 Future Goals:  
   -find a way to have analysis function take into account if either annotation and ap_posture have only 1 posture
    and if they differ (reference noldus code for this) DONE  
