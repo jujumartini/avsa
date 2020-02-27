@@ -19,6 +19,23 @@ create_visit_summary()
 
 
 
+# IRR ---------------------------------------------------------------------
+
+irr_table <- vroom(file = "./3_data/analysis/irr_table.csv",
+                   delim = ",",
+                   col_names = c("id_visit",
+                                 "kripp_full",
+                                 "kripp_gapless"))
+mean(irr_table$kripp_full)
+min(irr_table$kripp_full)
+max(irr_table$kripp_full)
+
+mean(irr_table$kripp_gapless)
+min(irr_table$kripp_gapless)
+max(irr_table$kripp_gapless)
+
+
+
 # bias --------------------------------------------------------------------
 
 create_bias_table()
