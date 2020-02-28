@@ -65,3 +65,5 @@ list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
 
 analysis_avsa(merged_list = list_merged)
 warnings()
+
+analysis_sedentary(merged_list = list_merged)

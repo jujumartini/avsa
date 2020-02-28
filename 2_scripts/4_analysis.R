@@ -50,7 +50,7 @@ create_miss_table()
 
 # Figures: Plots ----------------------------------------------------------
 
-# figure_bias_minutes, save as 800 by 500 pixels
+# pos_figure_bias_minutes, save as 800 by 500 pixels
 tbl_bias_time <- read_rds(path = "./4_results/summary_posture_time.rds")
 {
   
@@ -104,7 +104,7 @@ tbl_bias_time <- read_rds(path = "./4_results/summary_posture_time.rds")
   }
 }
 
-# figure_bias_percent, save as 800 by 500 pixels
+# pos_figure_bias_percent, save as 800 by 500 pixels
 tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
 {
   
@@ -158,7 +158,7 @@ tbl_bias_perc <- read_rds(path = "./4_results/summary_posture_perc.rds")
   }
 }
 
-# figure_miss_minutes, save as 850 by 600 (reshape2)
+# pos_figure_miss_minutes, save as 850 by 600 (reshape2)
 tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
 {
   
@@ -212,7 +212,7 @@ tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
   
 }
 
-# figure_miss_percent, save as 800 by 600 (reshape2)
+# pos_figure_miss_percent, save as 800 by 600 (reshape2)
 tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
 {
   
@@ -274,7 +274,7 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
 
 # Figures: Tables ---------------------------------------------------------
 
-# table_bias_minutes, save as 650 by 175 pixels
+# pos_table_bias_minutes, save as 650 by 175 pixels
 tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
 {
   
@@ -314,7 +314,7 @@ tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
   
 }
 
-# table_bias_percent, save as 650 by 175 pixels
+# pos_table_bias_percent, save as 650 by 175 pixels
 tbl_bias_perc <- read_rds(path = "./4_results/posture_bias_perc.rds")
 {
   
@@ -367,7 +367,7 @@ tbl_bias_perc <- read_rds(path = "./4_results/posture_bias_perc.rds")
   
 }
 
-# table_miss_minutes, save as 600 by 175 pixels
+# pos_table_miss_minutes, save as 600 by 175 pixels
 tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
 {
   
@@ -390,7 +390,7 @@ tbl_miss_time <- read_rds(path = "./4_results/posture_miss_time.rds")
   
 }
 
-# table_miss_percent, save as 600 by 175 pixels
+# pos_table_miss_percent, save as 600 by 175 pixels
 tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
 {
   
@@ -426,5 +426,108 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
               list("Posture" = formatter("span",
                                          style = x ~ style(font.weight = "bold"))),
               align = c("l", "c", "c", "c", "c", "c", "c"))
+  
+}
+
+
+
+# sedentary vs upright ----------------------------------------------------
+
+create_sedentary_tables()
+
+# sed_table_bias_minutes, save as 650 by 145 pixels
+tbl_bias_time <- read_rds(path = "./4_results/sedentary_bias_time.rds")
+{
+  
+  tbl <- tbl_bias_time
+  
+  # merge mean and sd columns, /u00b1 is plus/minus symbol
+  tbl$AP <- paste(tbl$AP_mean,
+                  tbl$AP_sd,
+                  sep = " \u00b1 ")
+  
+  tbl$IMG <- paste(tbl$IMG_mean,
+                   tbl$IMG_sd,
+                   sep = " \u00b1 ")
+  
+  # clean
+  tbl <- tbl[, c("Posture",
+                 "AP",
+                 "IMG",
+                 "Bias",
+                 "SE",
+                 "Lower_95_Bias",
+                 "Upper_95_Bias")]
+  
+  colnames(tbl) <- c("Posture",
+                     "AP min \u00b1 SD",
+                     "IMG min \u00b1 SD",
+                     "Bias",
+                     "SE",
+                     "Lower 95% CI",
+                     "Higher 95% CI")
+  
+  # format
+  formattable(tbl,
+              list(Posture = formatter("span",
+                                       style = x ~ style(font.weight = "bold"))),
+              align = c("l", "c", "c", "c", "c", "c", "c"))
+  
+}
+
+# sed_figure_miss_percent, save as 800 by 600 (reshape2)
+tbl_miss_perc <- read_rds(path = "./4_results/sedentary_miss_perc.rds")
+{
+  
+  # read in only classifications
+  graph <- tbl_miss_perc[ , -which(colnames(tbl_miss_perc) %in% c("AP_Total"))]
+  
+  # rename IMG to correct
+  colnames(graph)[2] <- "Correct"
+  
+  # change table into variables that represent x, y, other
+  graph <- graph %>% 
+    melt(id.vars = "Posture")
+  
+  # clean
+  colnames(graph)[2] <- "Classification"
+  
+  graph <- graph[graph$value != 0, ]
+  
+  graph$Posture <- factor(graph$Posture,
+                          levels = c("Sedentary",
+                                     "Upright"))
+  
+  # label
+  lbl <- tbl_miss_perc
+  lbl$label <- lbl$AP_Total/lbl$AP_Total*100
+  
+  # plot
+  ggplot(data = graph) +
+    geom_bar(mapping = aes(x = Posture,
+                           y = value,
+                           fill = Classification),
+             stat = "identity") +
+    geom_text(data = lbl,
+              mapping = aes(x = Posture,
+                            y = label,
+                            label = paste(AP_Total, "mins")),
+              vjust = -0.5) +
+    geom_text(mapping = aes(x = Posture,
+                            y = value,
+                            fill = Classification,
+                            label = paste0(value, "%")),
+              position = position_stack(vjust = 0.5)) +
+    theme(plot.title = element_text(lineheight = 1,
+                                    hjust = .5),
+          text = element_text(size = 15)) +
+    labs(title = "Proportion of Total AP estimates classified by IMGs",
+         x = "Posture",
+         y = "% of Total AP Estimates") +
+    scale_fill_manual(values = c("#3399FF",
+                                 "#FF6666",
+                                 "#9999FF",
+                                 "#FF9933",
+                                 "#99CC99"))
   
 }
