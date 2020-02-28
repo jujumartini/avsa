@@ -1853,6 +1853,146 @@ ysav_ap$time <- ysav_ap$time + 3106.8918*24*60*60 ### CORRECTION FACTOR ###
 }
 
 
+
+# process_irr - test 1 ---------------------------------------------------------------------
+
+list_irr <- list.files("./3_data/raw/IRR",
+                       ".csv")
+anno_file_list <- list_irr
+
+# sbs function for code times
+sbs <- function(i) {
+  
+  new <- seq.POSIXt(mer_anno$NEWstarttime[i],
+                    mer_anno$NEWendtime[i], by = "sec")
+  annotation <- rep(mer_anno$annotation[i],
+                    length(new))
+  data.frame(time = new,
+             annotation = annotation)
+  
+}
+
+# create processed anno files
+for (i in seq_along(anno_file_list)) {
+  
+  file_name <- anno_file_list[1]
+  
+  message("\nProcessing ", file_name, "...")
+  
+  # difference
+  raw_anno <- read.table(file = paste0("./3_data/raw/IRR/", file_name),
+                         header = T,
+                         sep = ",")
+  
+  raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+                                tz="UTC")
+  raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                              tz="UTC")
+  raw_anno$startTime <- with_tz(raw_anno$startTime,
+                                tz = "America/Chicago")
+  raw_anno$endTime <- with_tz(raw_anno$endTime,
+                              tz = "America/Chicago")
+  
+  # merge times and raw
+  id <- as.integer(substr(file_name, 6, 9))
+  visit <- as.integer(substr(file_name, 11, 11))
+  raw_anno$ID <- id
+  raw_anno$Visit = visit
+  mer_anno <- merge(raw_anno,
+                    corr_times,
+                    by = c("ID",
+                           "Visit"))
+  
+  # check#1: See if timestamp was entered
+  if (all(is.na(mer_anno$Difference))) {
+    
+    warning("\n",
+            "\n",
+            file_name, "annotation file does not have an entry in Timestamps.csv")
+    
+  } else {
+    
+    # add diff to times
+    mer_anno <- mer_anno %>%
+      mutate(NEWstarttime = if_else(!is.na(Difference),
+                                    startTime + Difference,
+                                    startTime))
+    mer_anno <- mer_anno %>%
+      mutate(NEWendtime = if_else(!is.na(Difference),
+                                  endTime + Difference,
+                                  endTime))
+    
+    # to POSIXlt for padding later 
+    mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                      format="%Y-%m-%d %H:%M:%OS")
+    mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                    format="%Y-%m-%d %H:%M:%OS")
+    
+    # sbs
+    n <- nrow(mer_anno)
+    l <- lapply(1:n, sbs)
+    sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
+                                   pad())
+    
+    # changing NA's to transition;gap
+    levels <- levels(sbs_anno$annotation)
+    levels[length(levels) + 1] <- "gap"
+    sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                  levels = levels)
+    sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "gap"
+    
+    # on off times
+    on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
+    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+    
+    #	label off times
+    sbs_anno$off <- 1
+    n <- dim(sbs_anno)[1]
+    index <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+    sbs_anno$off[index] <- 0
+    
+    # check#2: see if off times were actually labeled
+    inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
+    i <- length(inds_worn)
+    if(i == 0) {
+      
+      warning("\n",
+              "\n",
+              file_name, "timestamp or on_off_log entry incorrect")
+      
+    } else {
+      
+      # Clean - avsa specific
+      vis_anno <- sbs_anno[sbs_anno$off == 0, ] # remove off times
+      vis_anno$time <- as.POSIXct(vis_anno$time, 
+                                  tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+      vis_anno$ID <- id # add in ID
+      vis_anno$Visit <- visit # add in Visit number
+      vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+      vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+      vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
+      vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
+      vis_anno <-vis_anno[, c("ID",
+                              "Visit",
+                              "time",
+                              "annotation")]
+      
+      # write table, difference compared to process_anno
+      write.table(vis_anno,
+                  file = paste0("./3_data/processed/irr_clean/",
+                                file_name),
+                  sep = ",",
+                  row.names = F)
+      
+    }
+  }
+}
+
+
+
 # merge_anno_ap - Test 1 --------------------------------------------------
 test <- "1002V3.csv"
 
@@ -1897,6 +2037,107 @@ if (l == n) {
   warning(paste(id_visit, "annotation and AP file do not match in time",
                 sep = " "))
   
+}
+
+
+
+# merg_irr - test 1 -------------------------------------------------------
+
+list_irr <- list.files("./3_data/processed/irr_clean",
+                               ".csv")
+
+# list names of visits
+index <- str_sub(list_irr,
+                 start = 1,
+                 end = 11) %>% 
+  unique()
+
+for (i in seq_along(index)) {
+  
+  # list files per visit
+  list_visit <- list_irr[str_detect(list_irr,
+                                    index[5])]
+  
+  # get id and visit for table
+  id_visit <- str_sub(list_visit[1],
+                      start = 1,
+                      end = 11)
+
+  for (i in seq_along(list_visit)) {
+    
+    file_name <- list_visit[i]
+    
+    # read in one visit file
+    irr_img <- vroom(file = paste("./3_data/processed/irr_clean",
+                                  file_name,
+                                  sep = "/"),
+                     delim = ",")
+    
+    irr_img <- unique(irr_img)
+    
+    # get coder name and rename annotation column after it
+    coder <- sub(".*\\E_",
+                 "",
+                 file_name)
+    coder <- sub("\\..*",
+                 "",
+                 coder)
+    
+    colnames(irr_img)[4] <- coder
+    
+    # put anno files in one list
+    if (i == 1) {
+      
+      list_merge <- list(irr_img)
+      
+    } else if (i > 1) {
+      
+      list_merge[[i]] <- irr_img
+      
+    }
+  }
+
+  # merge anno's for one visit into one df
+  irr_merged <- bind_cols(list_merge)
+  
+  # remove id, visit, time
+  og <- colnames(irr_merged)[1:3]
+  dup <- c(og,
+           paste0(og, "1"),
+           paste0(og, "2"),
+           paste0(og, "3"))
+  irr_clean <- irr_merged[, -which(colnames(irr_merged) %in% dup)]
+  
+  # krippendorff's alpha
+  irr_kripp <- kripp.alpha(t(irr_clean),
+                           method = "nominal")
+  
+  irr_gapless <- irr_clean[irr_clean$Chang != 3 & irr_clean$Miller != 3 & irr_clean$Smith != 3,]
+  
+  irr_kripp_gapless <- kripp.alpha(t(irr_gapless),
+                                   method = "nominal")
+  
+  # make df
+  irr_table <- data.frame(id_visit     = id_visit,
+                          kripp_full   = irr_kripp$value,
+                          krip_gapless = irr_kripp_gapless$value)
+  
+  # write table
+  if (i == 1) {
+    
+    vroom_write(irr_table,
+                path = "./4_results/irr_table.csv",
+                delim = ",",
+                append = F)
+    
+  } else if (i > 1) {
+    
+    vroom_write(irr_table,
+                path = "./4_results/irr_table.csv",
+                delim = ",",
+                append = T)
+    
+  }
 }
 
 
@@ -3403,6 +3644,279 @@ if (counter > 1) {
   
 }
   
+
+
+# analysis_sedentary ------------------------------------------------------
+
+list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
+merged_list <- list_merged
+file_name <- merged_list[1] # 1002v3 NORMAL 
+file_name <- merged_list[22] # 1074v2 NO SITTING - GOOD
+file_name <- merged_list[28] # 1085v3 NO SITTING - GOOD
+  
+  counter <- 1
+  
+  for (i in seq_along(merged_list)) {
+    
+    file_name <- merged_list[i]
+    
+    message("\nPreparing ", file_name, "...")
+    
+    # read in merged file
+    data_merged <- suppressMessages(vroom(file = paste0("./3_data/analysis/merged_anno_ap/",
+                                                        file_name),
+                                          delim = ","))
+    
+    # make stand and move the same, then do the same as analysis_avsa (stand/move = 1)
+    data_sedentary <- lapply(data_merged,
+                             function(x) replace(x,x %in% 1:2, 1) ) %>% 
+      bind_cols()
+
+    data_gapless <- data_sedentary[data_sedentary$annotation != 3, ] # gaps = 3
+    data_event <- data_gapless[data_gapless$annotation != 4, ] # transitons = 4
+    
+    # fixpoint#1: if a file does not have a posture
+    data_gapless$annotation <- as.factor(data_gapless$annotation)
+    data_gapless$ap_posture <- as.factor((data_gapless$ap_posture))
+    
+    anno_levels <- levels(data_gapless$annotation)
+    ap_levels <- levels(data_gapless$ap_posture)
+    
+    if (length(anno_levels) < 3 || length(ap_levels) < 3) {
+      
+      event_levels <- union(anno_levels, ap_levels) %>% 
+        as.integer() %>% 
+        sort() %>% 
+        paste()
+      
+      # if event_levels has all postures
+      if (all(c("0", "1", "4") %in% event_levels)) {
+        
+        data_gapless$annotation <- factor(data_gapless$annotation,
+                                          levels = event_levels)
+        data_gapless$ap_posture<- factor(data_gapless$ap_posture,
+                                         levels = event_levels)
+        
+        # if there is no sitting in both anno and ap
+      } else if (all(c("1", "4") %in% event_levels)) {
+        
+        event_levels[length(event_levels) + 1] <- "0"
+        event_levels <- as.integer(event_levels) %>% 
+          sort() %>% 
+          paste()
+        
+        data_gapless$annotation <- factor(data_gapless$annotation,
+                                          levels = event_levels)
+        data_gapless$ap_posture<- factor(data_gapless$ap_posture,
+                                         levels = event_levels)
+        
+      } 
+    }    
+    
+    # fixpoint for event
+    data_event$annotation <- as.factor(data_event$annotation)
+    data_event$ap_posture <- as.factor((data_event$ap_posture))
+    
+    anno_levels <- levels(data_event$annotation)
+    ap_levels <- levels(data_event$ap_posture)
+    
+    if (length(anno_levels) < 2 || length(ap_levels) < 2) {
+      
+      event_levels <- union(anno_levels, ap_levels) %>% 
+        as.integer() %>% 
+        sort() %>% 
+        paste()
+      
+      # if event_levels has all postures
+      if (all(c("0", "1") %in% event_levels)) {
+        
+        data_event$annotation <- factor(data_event$annotation,
+                                        levels = event_levels)
+        data_event$ap_posture<- factor(data_event$ap_posture,
+                                       levels = event_levels)
+        
+        # if there is no sitting in both anno and ap
+      } else if (all(c("1") %in% event_levels)) {
+        
+        event_levels[length(event_levels) + 1] <- "0"
+        event_levels <- as.integer(event_levels) %>% 
+          sort() %>% 
+          paste()
+        
+        data_event$annotation <- factor(data_event$annotation,
+                                        levels = event_levels)
+        data_event$ap_posture<- factor(data_event$ap_posture,
+                                       levels = event_levels)
+        
+      } 
+    }    
+    
+    # TIMES: visit, event, transition (all converted to minutes)
+    time_visit <- (nrow(data_merged) %>%
+                     as.integer())/60
+    
+    time_event <- (data_event %>%
+                     nrow(.) %>% 
+                     as.integer())/60
+    
+    time_trans <- (data_merged[data_merged$annotation == 4, ] %>%
+                     nrow(.) %>% 
+                     as.integer())/60
+    
+    time_gap <- (data_merged[data_merged$annotation == 3, ] %>%
+                   nrow(.) %>% 
+                   as.integer())/60
+    
+    # check to see event and transition equal data_merged. dont include in function
+    all.equal(time_event + time_gap + time_trans,
+              nrow(data_merged)/60)
+    
+    # TIMES: event ap time (for bias), rows = ap
+    time_matr_event <- (table(data_event$ap_posture,
+                              data_event$annotation) %>% 
+                          addmargins())/60
+    time_matr_event
+    
+    time_ap_sed <- time_matr_event[1, 3] # (non)sedentary times
+    time_ap_upr <- time_matr_event[2, 3]
+    
+    # TIMES: anno times and (miss)classifications, anno times are same within event and gapless
+    time_matr_gapless <- (table(data_gapless$ap_posture,
+                                data_gapless$annotation) %>% 
+                            addmargins())/60
+    time_matr_gapless
+    
+    time_anno_sed <- time_matr_gapless[4, 1]
+    time_anno_upr <- time_matr_gapless[4, 2]
+    
+    time_agre_ss <- time_matr_gapless[1, 1] # last two letters: first is ap, second is anno, u = upright
+    time_miss_su <- time_matr_gapless[1, 2] # "anno misclassified ap sitting as upright"
+    
+    time_miss_us <- time_matr_gapless[2, 1]
+    time_agre_uu <- time_matr_gapless[2, 2] # "anno agrees with ap upright"
+    
+    time_miss_st <- time_matr_gapless[1, 3] # "transition time when there is ap sitting"
+    time_miss_ut <- time_matr_gapless[2, 3]
+    
+    # TIMES: total ap time and total agree time
+    tot_time_ap_sed <- time_matr_gapless[1, 4]
+    tot_time_ap_upr <- time_matr_gapless[2, 4]
+    
+    time_agre_total <- time_agre_ss + time_agre_uu
+    
+    # check
+    sum(data_sedentary$annotation == data_sedentary$ap_posture)/60 # TRUE = agree, adds all sec they agree
+    all.equal(time_agre_total,
+              sum(data_sedentary$annotation == data_sedentary$ap_posture)/60)
+    
+    # time table
+    id <- data_merged$ID[1]
+    visit <- data_merged$Visit[1]
+    
+    table_sedentary_time <- data.frame(ID             = id,
+                                      Visit          = visit,
+                                      total_agree    = time_agre_total,
+                                      event_agree    = time_agre_total,
+                                      sed_ap         = time_ap_sed,
+                                      sed_anno       = time_anno_sed,
+                                      upright_ap     = time_ap_upr,
+                                      upright_anno   = time_anno_upr,
+                                      total_sed_ap   = tot_time_ap_sed,
+                                      total_upr_ap   = tot_time_ap_upr,
+                                      sed_agree      = time_agre_ss,
+                                      upr_agree      = time_agre_uu,
+                                      sed_trans      = time_miss_st,
+                                      upr_trans      = time_miss_ut,
+                                      sed_mis_upr    = time_miss_su,
+                                      upr_mis_sed    = time_miss_us)
+    
+    # PERCENTAGES: total agreement and event agreement
+    perc_agre_total <-  time_agre_total/time_visit*100 #
+    perc_agre_event <-  time_agre_total/time_event*100 #
+    
+    # PERCENTAGES: ap and anno of event time
+    perc_matr_event <- (time_matr_event/time_matr_event[, 3])*100 # dividing by ap posture times
+    perc_matr_event
+    
+    perc_ap_sed <- time_ap_sed/time_event*100 # posture percentages of event time
+    perc_ap_upr <- time_ap_upr/time_event*100
+    perc_ap_sed + perc_ap_upr == 100
+    
+    perc_anno_sed <- time_anno_sed/time_event*100
+    perc_anno_upr <- time_anno_upr/time_event*100
+    all.equal(perc_anno_sed + perc_anno_upr,
+              100)
+    
+    # PERCENTAGES: (miss)classifications relative to total ap time
+    perc_matr_gapless <- (time_matr_gapless/time_matr_gapless[, 4])*100
+    
+    perc_agre_ss <- perc_matr_gapless[1, 1] # last two letters: firs is ap, second is anno, d = stand, t = trans
+    perc_miss_su <- perc_matr_gapless[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+
+    perc_miss_us <- perc_matr_gapless[2, 1]
+    perc_agre_uu <- perc_matr_gapless[2, 2] # "anno agrees with ap upright ##% of ap upright time"
+
+    perc_miss_st <- perc_matr_gapless[1, 3] # "##% of TOTAL (non-event) ap sit time classified as transition"
+    perc_miss_ut <- perc_matr_gapless[2, 3]
+    
+    # PERCENTAGES: total ap time relative to visit time
+    tot_perc_ap_sed <- tot_time_ap_sed/time_visit*100 # posture percentages of event time
+    tot_perc_ap_upr <- tot_time_ap_upr/time_visit*100
+    
+    # percentage table
+    table_sedentary_percentage <- data.frame(ID             = id,
+                                            Visit          = visit,
+                                            total_agree    = perc_agre_total,
+                                            event_agree    = perc_agre_event,
+                                            sed_ap         = perc_ap_sed,
+                                            sed_anno       = perc_anno_sed,
+                                            upright_ap     = perc_ap_upr,
+                                            upright_anno   = perc_anno_upr,
+                                            total_sed_ap   = tot_perc_ap_sed,
+                                            total_upr_ap   = tot_perc_ap_upr,
+                                            sed_agree      = perc_agre_ss,
+                                            upr_agree      = perc_agre_uu,
+                                            sed_trans      = perc_miss_st,
+                                            upr_trans      = perc_miss_ut,
+                                            sed_mis_upr    = perc_miss_su,
+                                            upr_mis_sed    = perc_miss_us)
+    
+    # write tables
+    if (counter == 1) {
+      
+      vroom_write(table_sedentary_time,
+                  path = "./3_data/analysis/table_sedentary_time.csv",
+                  delim = ",",
+                  append = F)
+      
+      vroom_write(table_sedentary_percentage,
+                  path = "./3_data/analysis/table_sedentary_percentage.csv",
+                  delim = ",",
+                  append = F)
+      
+    }
+    
+    if (counter > 1) {
+      
+      vroom_write(table_sedentary_time,
+                  path = "./3_data/analysis/table_sedentary_time.csv",
+                  delim = ",",
+                  append = T)
+      
+      vroom_write(table_sedentary_percentage,
+                  path = "./3_data/analysis/table_sedentary_percentage.csv",
+                  delim = ",",
+                  append = T)
+      
+    }
+    
+    counter <- counter+1
+    
+  }
+
+
+
+
 
 # create summary file tests -----------------------------------------------
 create_posture_summary()
