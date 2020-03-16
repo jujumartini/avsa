@@ -259,9 +259,9 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
     theme(plot.title = element_text(lineheight = 1,
                                     hjust = .5),
           text = element_text(size = 15)) +
-    labs(title = "Proportion of Total AP estimates classified by IMGs",
+    labs(title = "Proportion of Total activPAL estimates classified by Images",
          x = "Posture",
-         y = "% of Total AP Estimates") +
+         y = "% of Total activPAL Estimates") +
     scale_fill_manual(values = c("#3399FF",
                                  "#FF6666",
                                  "#9999FF",
