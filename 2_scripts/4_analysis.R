@@ -259,9 +259,9 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
     theme(plot.title = element_text(lineheight = 1,
                                     hjust = .5),
           text = element_text(size = 15)) +
-    labs(title = "Proportion of Total AP estimates classified by IMGs",
+    labs(title = "Proportion of Total activPAL estimates classified by Images",
          x = "Posture",
-         y = "% of Total AP Estimates") +
+         y = "% of Total activPAL Estimates") +
     scale_fill_manual(values = c("#3399FF",
                                  "#FF6666",
                                  "#9999FF",
@@ -274,7 +274,7 @@ tbl_miss_perc <- read_rds(path = "./4_results/posture_miss_perc.rds")
 
 # Figures: Tables ---------------------------------------------------------
 
-# pos_table_bias_minutes, save as 650 by 175 pixels
+# pos_table_bias_minutes, save as 750 by 175 pixels
 tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
 {
   
@@ -291,18 +291,18 @@ tbl_bias_time <- read_rds(path = "./4_results/posture_bias_time.rds")
   
   # clean
   tbl <- tbl[, c("Posture",
-                 "AP",
                  "IMG",
+                 "AP",
                  "Bias",
                  "SE",
                  "Lower_95_Bias",
                  "Upper_95_Bias")]
   
   colnames(tbl) <- c("Posture",
-                     "AP min \u00b1 SD",
-                     "IMG min \u00b1 SD",
+                     "Image min \u00b1 SD",
+                     "activPAL min \u00b1 SD",
                      "Bias",
-                     "SE",
+                     "Standard Error",
                      "Lower 95% CI",
                      "Higher 95% CI")
   
