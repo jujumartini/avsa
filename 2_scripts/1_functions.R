@@ -1,47 +1,159 @@
-read_on_off_log <- function(path) {
+read_on_off_log <- function(path,
+                            name_log) {
   
-  on_off_log <- suppressMessages(vroom(file = path,
+  # path = "./3_data/raw/"
+  # name_log = "visit_on_off_log.csv"
+  
+  on_off_raw <- suppressMessages(vroom(file = paste0(path,
+                                                     name_log),
                                        delim = ","))
   
-  on_off_log$date_on <- paste(on_off_log$date_on_month,
-                              on_off_log$date_on_day,
-                              on_off_log$date_on_year,
-                              sep="/")
-  on_off_log$time_on <- paste(on_off_log$time_on_hour,
-                              on_off_log$time_on_minute,
-                              on_off_log$time_on_seconds,
-                              sep=":")
-  on_off_log$date_off <- paste(on_off_log$date_off_month,
-                               on_off_log$date_off_day,
-                               on_off_log$date_off_year,
-                               sep="/")
-  on_off_log$time_off <- paste(on_off_log$time_off_hour,
-                               on_off_log$time_off_minute,
-                               on_off_log$time_off_seconds,
-                               sep=":")
-  on_off_log$date_time_on <- paste(on_off_log$date_on,
-                                   on_off_log$time_on,
-                                   sep=" ")
-  on_off_log$date_time_off <- paste(on_off_log$date_off,
-                                    on_off_log$time_off,
-                                    sep=" ")
-  on_off_log$date_time_on <- strptime(on_off_log$date_time_on,
-                                      "%m/%d/%Y %H:%M:%S")
-  on_off_log$date_time_off <- strptime(on_off_log$date_time_off,
-                                       "%m/%d/%Y %H:%M:%S")
-  on_off_log$date_time_on <- force_tz(on_off_log$date_time_on,
-                                      tz = "America/Chicago")
-  on_off_log$date_time_off <- force_tz(on_off_log$date_time_off,
-                                       tz = "America/Chicago")
+  colnames(on_off_raw) <- str_replace_all(colnames(on_off_raw),
+                                          pattern = "\\.",
+                                          replacement = "_")
   
-  on_off_log <- on_off_log[, c("ID",
-                               "Visit",
-                               "date_time_on",
-                               "date_time_off")]
+  on_off_raw$date_time_on <- 
+    make_datetime(
+      year  = on_off_raw$date_on_year,
+      month = on_off_raw$date_on_month,
+      day   = on_off_raw$date_on_day,
+      hour  = on_off_raw$time_on_hour,
+      min   = on_off_raw$time_on_minute,
+      sec   = on_off_raw$time_on_seconds,
+      tz    = "America/Chicago"
+    )
+  on_off_raw$date_time_off <- 
+    make_datetime(
+      year  = on_off_raw$date_off_year,
+      month = on_off_raw$date_off_month,
+      day   = on_off_raw$date_off_day,
+      hour  = on_off_raw$time_off_hour,
+      min   = on_off_raw$time_off_minute,
+      sec   = on_off_raw$time_off_seconds,
+      tz    = "America/Chicago"
+    )
   
-  assign("log_on_off",
-         on_off_log,
-         envir = .GlobalEnv)
+  chr_nme_case <-   colnames(on_off_raw)[1:2] %>% 
+    str_sub(start = 1, end = 1) %>% 
+    paste(collapse = "")
+  
+  if (chr_nme_case == "IV") {
+    
+    on_off_clean <- on_off_raw[, c("ID",
+                                   "Visit",
+                                   "date_time_on",
+                                   "date_time_off")]
+    
+  } else if (chr_nme_case == "iv") {
+    
+    on_off_clean <- on_off_raw[, c("id",
+                                   "visit",
+                                   "date_time_on",
+                                   "date_time_off")]
+    
+  }
+
+  # seconds on for seeing if all on times are applied
+  on_off_clean$seconds_on <- as.vector(
+    difftime(
+      on_off_clean$date_time_off,
+      on_off_clean$date_time_on,
+      units = "secs"
+    )
+  )
+  
+  # vec_clean_ids <- unique(paste0(on_off_clean$id,
+  #                                on_off_clean$visit))
+  # 
+  # if (all(subjects_visits %in% vec_clean_ids) == F) {
+  # 
+  #   ind_missing <- which(subjects_visits %in% vec_clean_ids == F)
+  #   list_missing <- subjects_visits[ind_missing]
+  # 
+  #   for (missing_on_off_entry in list_missing)
+  # 
+  #     warning("ID ", missing_on_off_entry, ":\n",
+  #             "    Subject log has entry for ID BUT!\n",
+  #             "    No corresponding entry found in on off log.\n",
+  #             "    Please put entry in ", name_log, " before preceeding.\n",
+  #             call. = F)
+  # 
+  # }
+
+  if (all(on_off_clean$seconds_on > 0) == F) {
+
+    # off entry is before on entry, only for subjects included in subject log
+    ind_vis_mis <- which(on_off_clean$seconds_on <= 0)
+
+    vec_mis_ids <- paste0(on_off_clean$id[ind_vis_mis],
+                          on_off_clean$visit[ind_vis_mis])
+
+    # list_mis_on_off <- paste(on_off_clean$date_time_on[ind_vis_mis],
+    #                          on_off_clean$date_time_off[ind_vis_mis],
+    #                          sep = " - ")
+
+    # see where mistake entries (whole row pasted together) lie in raw
+    vec_clean_entries <- apply(on_off_clean[, 1:4],
+                               MARGIN = 1,
+                               FUN = paste,
+                               collapse = "")
+    vec_mis_entries <- apply(on_off_clean[ind_vis_mis, 1:4],
+                             MARGIN = 1,
+                             FUN = paste,
+                             collapse = "")
+
+    ind_raw_mis <- which(vec_clean_entries %in% vec_mis_entries)
+
+    vec_mis_on_off <-
+      paste(
+        format.POSIXct(on_off_raw$date_time_on[ind_raw_mis],
+                       format = "%m/%d/%Y %H:%M:%S"),
+        format.POSIXct(on_off_raw$date_time_off[ind_raw_mis],
+                       format = "%m/%d/%Y %H:%M:%S"),
+        sep = " - "
+      )
+    
+    for (i in seq_along(vec_mis_ids)) {
+      
+      mis_num    <- ind_raw_mis[i] + 1
+      mis_id     <- vec_mis_ids[i]
+      mis_on_off <- vec_mis_on_off[i]
+      
+      warning("Mistake in Line #", mis_num, ":\n",
+              "    ", mis_id, ", ", mis_on_off, ".\n",
+              "    Off time takes place before on time.\n",
+              "    Please fix entry in ", name_log, " before preceeding.\n",
+              call. = F)
+      
+    }
+    
+  }
+  
+  # check to see for duplicates
+  # on_off_vis[duplicated(on_off_vis$date_time_on), ]
+  # duplicated(on_off_vis$date_time_on)
+  # duplicated(on_off_vis)
+  # 
+  # ind_dup_on <- which(duplicated(on_off_vis$date_time_on) | duplicated(on_off_vis$date_time_on,
+  #                                                                      fromLast = T))
+  # 
+  # ind_dup_off <- which(duplicated(on_off_vis$date_time_off) | duplicated(on_off_vis$date_time_off,
+  #                                                                      fromLast = T))
+  # 
+  # 
+  # dup_on <- on_off_vis[ind_dup_on, ]
+  # dup_off <- on_off_vis[ind_dup_off, ]
+  # 
+  # dup_on$seconds_on <= 0
+  # 
+  # 
+  # 
+  # duplicated(on_off_vis$date_time_on) | duplicated(on_off_vis$date_time_on,
+  #                                                  fromLast = T)
+  # 
+  # on_off_log[on_off_log$seconds_on <= 0, ]
+  
+  return(on_off_clean)
   
 }
 

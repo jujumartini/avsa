@@ -3,7 +3,8 @@ source("./2_scripts/1_functions.R")
 # prelimary ---------------------------------------------------------------
 
 # read in on off log, needed for process functions
-read_on_off_log(path = "./3_data/raw/visit_on_off_log.csv")
+log_on_off <- read_on_off_log(path = "./3_data/raw/",
+                              name_log = "visit_on_off_log.csv")
 
 
 
