@@ -743,24 +743,14 @@ if (dim(mer_anno)[1] == 0) {
 # process_anno - Test 5 ---------------------------------------------------
 # break into sequences for easy traceback on where errors will occur 
 
-# anno_file_list = list_anno
-# corr_times = timestamps
-# on_off_log = log_on_off
+# anno_file_list <- list_anno
+# corr_times <- timestamps
+# on_off_log <- log_on_off
 fpa_img_raw <- "./3_data/raw/annotation/"
-
-# sbs function for code times
-sbs <- function(i) {
-  
-  new <- seq.POSIXt(tib_img_mer$NEWstarttime[i],
-                    tib_img_mer$NEWendtime[i], by = "sec")
-  annotation <- rep(tib_img_mer$annotation[i],
-                    length(new))
-  data.frame(time = new,
-             annotation = annotation)
-  
-}
-
+fpa_img_clean <- "./3_data/processed/anno_clean/"
 fnm_img_raw <- anno_file_list[1]
+
+cnt_img_processed <- 1
 
 # create processed anno files
 for (i in seq_along(anno_file_list)) {
@@ -770,8 +760,15 @@ for (i in seq_along(anno_file_list)) {
   stu_sub_vis <- sub("\\_P.*",
                    "",
                    fnm_img_raw)
+  id <- as.integer(substr(fnm_img_raw, 6, 9))
+  visit <- as.integer(substr(fnm_img_raw, 11, 11))
   
-  message("\nProcessing ", stu_sub_vis, "...")
+  message("Processing File #", i, " : ", stu_sub_vis, "...",
+          appendLF = FALSE)
+  
+  #### STEP 1: raw
+  message("reading...",
+          appendLF = FALSE)
   
   tib_img_raw <- vroom(file = paste0(fpa_img_raw, 
                                      fnm_img_raw),
@@ -792,8 +789,6 @@ for (i in seq_along(anno_file_list)) {
                               tzone = "America/Chicago")
   
   # merge times and raw
-  id <- as.integer(substr(fnm_img_raw, 6, 9))
-  visit <- as.integer(substr(fnm_img_raw, 11, 11))
   tib_img_raw$ID <- id
   tib_img_raw$Visit = visit
   
@@ -805,9 +800,11 @@ for (i in seq_along(anno_file_list)) {
   # check#1: See if timestamp was entered
   if (all(is.na(tib_img_mer$Difference))) {
     
-    warning("\n",
-            "\n",
-            file_name, "annotation file does not have an entry in Timestamps.csv")
+    message("\n")
+    
+    warning("IMG File ", stu_sub_vis, ":\n",
+            "    Annotation file does not have an entry in Timestamps.csv\n",
+            call. = FALSE)
     
     next()
     
@@ -815,19 +812,9 @@ for (i in seq_along(anno_file_list)) {
   
   # add diff to times
   tib_img_mer$NEWstarttime <- tib_img_mer$startTime + tib_img_mer$Difference
-  
   tib_img_mer$NEWendtime <- tib_img_mer$endTime + tib_img_mer$Difference
   
-  # tib_img_mer <- tib_img_mer %>%
-  #   mutate(NEWstarttime = if_else(!is.na(Difference),
-  #                                 startTime + Difference,
-  #                                 startTime))
-  # tib_img_mer <- tib_img_mer %>%
-  #   mutate(NEWendtime = if_else(!is.na(Difference),
-  #                               endTime + Difference,
-  #                               endTime))
-  
-  # need to strptime as there are fractional seconds in the start/end times.
+  # Need to strptime as there are fractional seconds in the start/end times.
   # padr cannot fill in gaps with fractional seconds.
   
   # seconds(tib_img_mer$NEWstarttime[1])
@@ -841,31 +828,19 @@ for (i in seq_along(anno_file_list)) {
              format = "%Y-%m-%d %H:%M:%OS") %>% 
     as.POSIXct(tz = "America/Chicago")
   
-  # tib_img_mer$NEWstarttime <- strptime(tib_img_mer$NEWstarttime,
-  #                                      format="%Y-%m-%d %H:%M:%OS")
-  # tib_img_mer$NEWendtime <- strptime(tib_img_mer$NEWendtime,
-  #                                    format="%Y-%m-%d %H:%M:%OS")
-  
   # write a "check" csv file to see if stopwatch matches NEW start time
   write.table(tib_img_mer,
               file = paste0("./3_data/processed/anno_check/",id, "V", visit, ".csv"),
               sep = ",",
               row.names = F)
   
-  # sbs
+  # STEP 2: second by second
+  message("sec-by-sec...",
+          appendLF = FALSE)  
+  
   cnt_sbs <- 1
   nrw_img_mer <- nrow(tib_img_mer)
-  sbs <- function(i) {
-    
-    new <- seq.POSIXt(tib_img_mer$NEWstarttime[i],
-                      tib_img_mer$NEWendtime[i], by = "sec")
-    annotation <- rep(tib_img_mer$annotation[i],
-                      length(new))
-    data.frame(time = new,
-               annotation = annotation)
-    
-  }
-  
+
   for (i in seq_len(nrw_img_mer)) {
   
     sbs_dtm_img <- seq.POSIXt(from = tib_img_mer$NEWstarttime[i],
@@ -899,77 +874,59 @@ for (i in seq_along(anno_file_list)) {
     suppressMessages(bind_rows(lst_sbs_part) %>% 
     pad())
   
+  tib_img_sbs$date <- date(tib_img_sbs$time)
   
-  # l <- lapply(1:nrw_img_mer, sbs)
-  # bind_rows(l)
-  # sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
-  #                                pad())
-  
-  # changing NA's to transition;gap
-  # levels <- levels(tib_img_sbs$annotation)
-  # levels[length(levels) + 1] <- "gap"
-  # tib_img_sbs$annotation <- factor(tib_img_sbs$annotation,
-  #                               levels = levels)
-  
+  # Need to change NA's to gap just in case for any int subsetting.
   tib_img_sbs$annotation[is.na(tib_img_sbs$annotation)] <- "gap"
   
-  # on off times
+  ####	STEP 3: Label on off times
+  message("off-times...",
+          appendLF = FALSE)
+
+  tib_img_sbs$off <- 1
+  
   tib_on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
-  dtm_on <- strptime(tib_on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
-  dtm_off <- strptime(tib_on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
-  
-  #	label off times
-  tib_img_sbs$off <- 1
-  n <- dim(tib_img_sbs)[1]
-  index <- (1:n)[(tib_img_sbs$time >= dtm_on) & (tib_img_sbs$time <= dtm_off)]
-  tib_img_sbs$off[index] <- 0
-  
-  # check#2: see if off times were actually labeled
-  inds_worn <- (1:(dim(tib_img_sbs)[1]))[tib_img_sbs$off==0]
-  i <- length(inds_worn)
-  
-  #################
-  
-  tib_img_sbs$off <- 1
-  
-  nrw_on_off <- nrow(tib_img_sbs)
+  nrw_on_off <- nrow(tib_on_off)
   dbl_sec_worn <- vector(mode = "double",
                          length = nrw_on_off)
   
-  #	if on/off times recorded - loop through and label time monitor is not worn
+  #	If on/off times recorded - loop through and label time monitor is not worn.
   for (i in seq_len(nrw_on_off)) {
     
-    dttm_on  <- tib_on_off$date_time_on[i]
-    dttm_off <- tib_on_off$date_time_off[i]
+    dtm_on  <- tib_on_off$date_time_on[i]
+    dtm_off <- tib_on_off$date_time_off[i]
     
-    inds_on <- which(
-      (tib_img_sbs$time >= dttm_on) & 
-        (tib_img_sbs$time <= dttm_off)
+    # Can use integer subsetting as time should never have an NA at this point.
+    ind_on <- which(
+      (tib_img_sbs$time >= dtm_on) &
+      (tib_img_sbs$time <= dtm_off)
     )
     
+
     # tells us if the on interval was actually in the AP file. Substract
     # one because it includes on time.
-    dbl_sec_worn[i] <- length(inds_on) - 1
+    dbl_sec_worn[i] <- length(ind_on) - 1
     
-    if (length(inds_on) > 0) {
+    if (length(ind_on) > 0) {
       
-      tib_img_sbs$off[inds_on] <- 0
+      tib_img_sbs$off[ind_on] <- 0
       
-      # if on interval goes past midnight, make all the dates the first date
-      # off the on interval
-      tib_img_sbs$date[inds_on] <- tib_img_sbs$date[inds_on][1]
+      # If on interval goes past midnight, make all the dates the first date
+      # of the on interval.
+      tib_img_sbs$date[ind_on] <- tib_img_sbs$date[ind_on][1]
       
     }
   }
   
   #### CHECK 3: see if off times were actually labeled.
-  dble_sec_on <- tib_on_off$seconds_on
+  dbl_sec_on <- tib_on_off$seconds_on
 
-  # take out extra "zero" seconds
-  intg_sec_applied <- sum(tib_img_sbs$off == 0) - nrw_on_off
-  intg_sec_worn_all <- as.integer(sum(dbl_sec_worn))
+  # In the event an on interval overlapped another on interval (take out extra
+  # "zero" seconds).
+  int_sec_applied <- sum(tib_img_sbs$off == 0) - nrw_on_off
+  int_sec_worn_all <- as.integer(sum(dbl_sec_worn))
   
-  if (intg_sec_applied == 0) {
+  if (int_sec_applied == 0) {
     
     # none of the AP file has any of the log entries.
     message("\n")
@@ -980,55 +937,55 @@ for (i in seq_along(anno_file_list)) {
     
     next() 
     
-  }  else if (all(dble_sec_on == dbl_sec_worn) == FALSE) {
+  }  else if (all(dbl_sec_on == dbl_sec_worn) == FALSE) {
     
     # AP partially has on off entry and does not have the rest after.
     message("\n")
     
-    inds_mis_part <- which(dble_sec_on != dbl_sec_worn &
+    ind_mis_part <- which(dbl_sec_on != dbl_sec_worn &
                              dbl_sec_worn != -1)
     
-    inds_mis_full <- which(dble_sec_on != dbl_sec_worn &
+    ind_mis_full <- which(dbl_sec_on != dbl_sec_worn &
                              dbl_sec_worn == -1)
     
-    char_entries_log <- apply(on_off_log[, 1:4],
+    chr_entries_log <- apply(on_off_log[, 1:4],
                               MARGIN = 1, 
                               FUN = paste,
                               collapse = " ")
-    char_entries_visit <- apply(tib_on_off[, 1:4],
+    chr_entries_visit <- apply(tib_on_off[, 1:4],
                                 MARGIN = 1, 
                                 FUN = paste,
                                 collapse = " ")
     
-    inds_log_part <- which(
-      char_entries_log %in% 
-        char_entries_visit[inds_mis_part]
+    ind_log_part <- which(
+      chr_entries_log %in% 
+        chr_entries_visit[ind_mis_part]
     )
-    inds_log_full <- which(
-      char_entries_log %in% 
-        char_entries_visit[inds_mis_full]
+    ind_log_full <- which(
+      chr_entries_log %in% 
+        chr_entries_visit[ind_mis_full]
     )
     
-    char_mis_time_part <- paste(
-      format.POSIXct(on_off_log$date_time_on[inds_log_part],
+    chr_mis_time_part <- paste(
+      format.POSIXct(on_off_log$date_time_on[ind_log_part],
                      format = "%m/%d/%Y %H:%M:%S"),
-      format.POSIXct(on_off_log$date_time_off[inds_log_part],
+      format.POSIXct(on_off_log$date_time_off[ind_log_part],
                      format = "%m/%d/%Y %H:%M:%S"),
       sep = " - "
     )
     
-    char_mis_time_full <- paste(
-      format.POSIXct(on_off_log$date_time_on[inds_log_full],
+    chr_mis_time_full <- paste(
+      format.POSIXct(on_off_log$date_time_on[ind_log_full],
                      format = "%m/%d/%Y %H:%M:%S"),
-      format.POSIXct(on_off_log$date_time_off[inds_log_full],
+      format.POSIXct(on_off_log$date_time_off[ind_log_full],
                      format = "%m/%d/%Y %H:%M:%S"),
       sep = " - "
     )
     
-    for (i in seq_along(inds_log_part)) {
+    for (i in seq_along(ind_log_part)) {
       
-      mis_num    <- inds_log_part[i]
-      mis_on_off <- char_mis_time_part[i]
+      mis_num    <- ind_log_part[i]
+      mis_on_off <- chr_mis_time_part[i]
       
       warning("ID ", id, ":\n",
               "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
@@ -1038,10 +995,10 @@ for (i in seq_along(anno_file_list)) {
       
     }
     
-    for (i in seq_along(inds_log_full)) {
+    for (i in seq_along(ind_log_full)) {
       
-      mis_num    <- inds_log_full[i]
-      mis_on_off <- char_mis_time_full[i]
+      mis_num    <- ind_log_full[i]
+      mis_on_off <- chr_mis_time_full[i]
       
       warning("ID ", id, ":\n",
               "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
@@ -1053,7 +1010,7 @@ for (i in seq_along(anno_file_list)) {
     
     next()
     
-  } else if (intg_sec_applied != intg_sec_worn_all) {
+  } else if (int_sec_applied != int_sec_worn_all) {
     
     # on intervals are in AP but one on interval overlaps another interval.
     message("\n")
@@ -1067,39 +1024,74 @@ for (i in seq_along(anno_file_list)) {
     
   }
   
+  #### STEP 4 : Clean (AVSA specific)
+  message("results...\n")
   
-  if(i == 0) {
+  tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0, ]
+  
+  attributes(tib_img_vis$ID)
+  class(tib_img_vis$annotation)
+  
+  tib_img_vis$id <- id
+  tib_img_vis$visit <- visit
+
+  uncodeable <- c("uncodeable;0001 camera start time",
+                  "uncodeable;0002 camera stop time",
+                  "uncodeable;0003 camera taken or turned off",
+                  "uncodeable;0004 image dark/blurred/obscured")
+  
+  ind_sit <- which(tib_img_vis$annotation == "posture;0006 sitting")
+  ind_sta <- which(tib_img_vis$annotation == "posture;0007 standing")
+  ind_mov <- which(tib_img_vis$annotation == "posture;0008 movement")
+  ind_gap <- which(tib_img_vis$annotation == "gap")
+  ind_tra <- which(tib_img_vis$annotation == "transition;0005 less than 3 images")
+  ind_unc <- which(tib_img_vis$annotation %in% uncodeable)
+  
+  if(length(ind_sit) +
+    length(ind_sta) +
+    length(ind_mov) +
+    length(ind_gap) +
+    length(ind_tra) +
+    length(ind_unc) != 
+    nrow(tib_img_vis)) {
     
-    warning("\n",
-            "\n",
-            file_name, "timestamp or on_off_log entry incorrect")
+    stop()
     
-  } else {
-    
-    # Clean - avsa specific
-    vis_anno <- tib_img_sbs[tib_img_sbs$off == 0, ] # remove off times
-    vis_anno$time <- as.POSIXct(vis_anno$time, 
-                                tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
-    vis_anno$ID <- id # add in ID
-    vis_anno$Visit <- visit # add in Visit number
-    vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
-    vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0"
-    vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1"
-    vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
-    vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
-    vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
-    vis_anno <-vis_anno[, c("ID",
-                            "Visit",
-                            "time",
-                            "annotation")]
-    
-    # write table
-    write.table(vis_anno,
-                file = paste0("./3_data/processed/anno_clean/", file_name, ".csv"),
-                sep = ",",
-                row.names = F)
   }
+   
+  tib_img_vis$annotation[ind_sit] <- "0"
+  tib_img_vis$annotation[ind_sta] <- "1"
+  tib_img_vis$annotation[ind_mov] <- "2"
+  tib_img_vis$annotation[ind_gap] <- "3"
+  tib_img_vis$annotation[ind_tra] <- "4"
+  tib_img_vis$annotation[ind_unc] <- "5"
+  
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0006 sitting"] <- "0"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0007 standing"] <- "1"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0008 movement"] <- "2"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "gap"] <- "3"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "transition;0005 less than 3 images"] <- "4"
+  # tib_img_vis$annotation[tib_img_vis$annotation %in% uncodeable] <- "5"
+  
+  tib_img_vis <-tib_img_vis[, c("id",
+                                "visit",
+                                "time",
+                                "date",
+                                "annotation")]
+  
+  # write table
+  vroom_write(tib_img_vis,
+              path = paste0(fpa_img_clean,
+                            stu_sub_vis,
+                            ".csv"),
+              delim = ",")
+  
+  cnt_img_processed <- cnt_img_processed + 1
+  
 }
+
+message("--------------------------------Done Processing--------------------------------\n",
+        "                              ", count_ap - 1, " files processed.\n")
 
 
 
