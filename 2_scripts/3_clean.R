@@ -3,31 +3,36 @@ source("./2_scripts/1_functions.R")
 # prelimary ---------------------------------------------------------------
 
 # read in on off log, needed for process functions
-on_off_log <- read_on_off_log(path = "./3_data/raw",
-                              name_log = "visit_on_off_log.csv")
+on_off_log <- 
+  read_on_off_log(
+    path = "./3_data/raw",
+    name_log = "visit_on_off_log.csv"
+  )
 
 
 
 # image Cleaning ----------------------------------------------------------
 
-list_anno <- toupper(list.files("./3_data/raw/annotation", ".csv"))
-
-read_timestamps(path = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv")
-
-# process_anno(fls_img_raw = list_anno,
-#              tib_cor_tme = timestamps,
-#              log_on_off = on_off_log)
+list_anno <- 
+  toupper(
+    list.files(
+      path = "./3_data/raw/annotation",
+      pattern = ".csv"
+    )
+  )
+timestamps <- 
+  read_timestamps(
+    fpa_timestamps = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp",
+    fnm_timestamps = "TimeStamps.csv"
+  )
 process_annotation(
   fpa_img_raw = "./3_data/raw/annotation/",
   fpa_img_clean = "./3_data/processed/anno_clean/",
   fls_img_raw = list_anno,
-  tib_cor_tme = timestamps,
+  tib_cor_time = timestamps,
   log_on_off = on_off_log
 )
 
-warnings()
-
-# check files under "check folder to see if Stopwatch matches up with 1 "NEWStartTime" timestamp
 
 
 

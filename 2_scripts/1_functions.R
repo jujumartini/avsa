@@ -162,36 +162,65 @@ read_on_off_log <- function(path,
 
 
 
-read_timestamps <- function(path) {
+read_timestamps <- 
+  function(
+    fpa_timestamps,
+    fnm_timestamps
+  ) {
   
-  corr_times <- suppressMessages(vroom(file = path,
-                                       delim = ",",
-                                       col_select = 1:4))
+  # fpa_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp"
+  # fnm_timestamps <- "TimeStamps.csv"
+  
+  tib_cor_times <- 
+    suppressMessages(
+      vroom(
+        file = paste(
+          fpa_timestamps,
+          fnm_timestamps,
+          sep = "/"
+        ),
+        delim = ",",
+        col_select = 1:4,
+        progress = FALSE
+      )
+    )
+  
+  # Consistency: column names with _ & all columns lowercase
+  colnames(tib_cor_times) <- 
+    str_replace_all(
+      colnames(tib_cor_times),
+      pattern = "\\.",
+      replacement = "_"
+    ) %>% 
+    str_to_lower()
 
   # although cameras are in UMASS when imgs are taken, img time still captured relative to midwest time
-  corr_times$StopWatch_YMD_HMS    <- suppressWarnings(ymd_hms(corr_times$StopWatch_YMD_HMS, 
-                                                              tz="America/chicago"))
-  corr_times$Corr_Picture_YMD_HMS <- suppressWarnings(ymd_hms(corr_times$Corr_Picture_YMD_HMS, 
-                                                              tz="America/chicago"))
+  tib_cor_times$stopwatch_ymd_hms <- 
+    suppressWarnings(
+      tib_cor_times$stopwatch_ymd_hms %>% 
+        lubridate::ymd_hms(tz = "America/chicago")
+    )
+  tib_cor_times$corr_picture_ymd_hms <- 
+    suppressWarnings(
+      tib_cor_times$corr_picture_ymd_hms %>% 
+        lubridate::ymd_hms(tz = "America/chicago")
+    )
+  tib_cor_times$difference <- 
+    difftime(
+      tib_cor_times$stopwatch_ymd_hms,
+      tib_cor_times$corr_picture_ymd_hms,
+      units = "secs"
+    )
   
-  # diff col
-  corr_times$Difference <- with(corr_times,
-                                difftime(StopWatch_YMD_HMS,
-                                         Corr_Picture_YMD_HMS,
-                                         units = "secs"))
-  
-  assign("timestamps",
-         corr_times,
-         envir = .GlobalEnv)
-  
-  id_miss <- corr_times$ID[is.na(corr_times$StopWatch_YMD_HMS) |
-                             is.na(corr_times$Corr_Picture_YMD_HMS)]
-  vis_miss <- corr_times$Visit[is.na(corr_times$StopWatch_YMD_HMS) |
-                                     is.na(corr_times$Corr_Picture_YMD_HMS)]
-  missing <- bind_cols(ID = id_miss,
-                       Visit = vis_miss)
-  missing <- paste(missing$ID,
-                   missing$Visit,
+  # If there are any missing entries.
+  id_miss <- tib_cor_times$id[is.na(tib_cor_times$stopwatch_ymd_hms) |
+                             is.na(tib_cor_times$corr_picture_ymd_hms)]
+  vis_miss <- tib_cor_times$visit[is.na(tib_cor_times$stopwatch_ymd_hms) |
+                                     is.na(tib_cor_times$corr_picture_ymd_hms)]
+  missing <- bind_cols(id = id_miss,
+                       visit = vis_miss)
+  missing <- paste(missing$id,
+                   missing$visit,
                    sep = "v")
   
   for (i in seq_along(missing)) { 
@@ -201,6 +230,9 @@ read_timestamps <- function(path) {
             "\n")
     
   }
+  
+  return(tib_cor_times)
+  
 }
 
 
@@ -208,16 +240,16 @@ read_timestamps <- function(path) {
 process_annotation <- function(fpa_img_raw,
                                fpa_img_clean,
                                fls_img_raw,
-                               tib_cor_tme,
+                               tib_cor_time,
                                log_on_off) {
   
   # fls_img_raw <- list_anno
-  # tib_cor_tme <- timestamps
+  # tib_cor_time <- timestamps
   # log_on_off <- on_off_log
   # fpa_img_raw <- "./3_data/raw/annotation/"
   # fpa_img_clean <- "./3_data/processed/anno_clean/"
   # which(str_detect(fls_img_raw, pattern = "1068V1"))
-  # fnm_img_raw <- fls_img_raw[21]
+  # fnm_img_raw <- fls_img_raw[1]
   
   cnt_img_processed <- 1
   
@@ -261,16 +293,16 @@ process_annotation <- function(fpa_img_raw,
                                    tzone = "America/Chicago")
     
     # merge times and raw
-    tib_img_raw$ID <- id
-    tib_img_raw$Visit = visit
+    tib_img_raw$id <- id
+    tib_img_raw$visit = visit
     
     tib_img_mer <- merge(tib_img_raw,
-                         tib_cor_tme,
-                         by = c("ID",
-                                "Visit"))
+                         tib_cor_time,
+                         by = c("id",
+                                "visit"))
     
     # check#1: See if timestamp was entered
-    if (all(is.na(tib_img_mer$Difference))) {
+    if (all(is.na(tib_img_mer$difference))) {
       
       message("\n")
       
@@ -283,8 +315,8 @@ process_annotation <- function(fpa_img_raw,
     }
     
     # add diff to times
-    tib_img_mer$NEWstarttime <- tib_img_mer$startTime + tib_img_mer$Difference
-    tib_img_mer$NEWendtime <- tib_img_mer$endTime + tib_img_mer$Difference
+    tib_img_mer$NEWstarttime <- tib_img_mer$startTime + tib_img_mer$difference
+    tib_img_mer$NEWendtime <- tib_img_mer$endTime + tib_img_mer$difference
     
     # Need to strptime as there are fractional seconds in the start/end times.
     # padr cannot fill in gaps with fractional seconds.
