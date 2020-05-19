@@ -3,7 +3,7 @@ source("./2_scripts/1_functions.R")
 # prelimary ---------------------------------------------------------------
 
 # read in on off log, needed for process functions
-on_off_log <- read_on_off_log(path = "./3_data/raw/",
+on_off_log <- read_on_off_log(path = "./3_data/raw",
                               name_log = "visit_on_off_log.csv")
 
 
@@ -33,11 +33,12 @@ warnings()
 
 # activpal cleaning -------------------------------------------------------
 
-list_ap <- list.files("./3_data/raw/events", ".csv")
-
-process_ap(ap_file_list = list_ap,
-           on_off_log = log_on_off)
-warnings()
+process_activpal2(
+  fpa_ap_raw = "./3_data/raw/events",
+  fpa_ap_clean = "./3_data/processed/ap_clean",
+  log_on_off = on_off_log,
+  id_visits = NULL
+)
 
 
 

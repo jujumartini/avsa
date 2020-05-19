@@ -2089,6 +2089,722 @@ if (dim(on_off)[1] == 0) {
 }
 
 
+
+# process_activpal2 -------------------------------------------------------
+
+# fpa_ap_raw <- "./3_data/raw/events"
+# fpa_ap_clean <- "./3_data/processed/ap_clean"
+# log_on_off <- on_off_log
+# id_visits <- "1096V2"
+
+cnt_ap <- 1
+
+fls_ap_raw <- 
+  list.files(
+    path = fpa_ap_raw,
+    pattern = ".csv"
+  )
+
+if (purrr::is_null(id_visits) == FALSE) {
+  
+  if (purrr::is_scalar_character(id_visits)) {
+    
+    ind_fls_raw <- 
+      fls_ap_raw %>% 
+      str_detect(pattern = id_visits) %>% 
+      which()
+    fls_ap_raw <- 
+      fls_ap_raw[ind_fls_raw]
+    
+  } else {
+    
+    # id_visits is not a character or single entry.
+    stop(
+      'Argument "id_visits" is not scalar.\n',
+      'Please make sure id_visits are seperated by "|" with no spaces\n',
+      "in between."
+    )
+    
+  }
+  
+}
+
+# fnm_ap_raw <- fls_ap_raw[1]
+
+# since event file names have mumbo jumbo after first 6 characters
+# chr_ids_visits <- 
+#   str_sub(
+#     fls_ap_raw,
+#     start = 1,
+#     end = 6
+#   )
+
+for (i in seq_along(fls_ap_raw)) {
+  
+  fnm_ap_raw <- fls_ap_raw[i]
+  id_visit <-
+    str_sub(
+      fnm_ap_raw,
+      start = 1,
+      end = 6
+    )
+  id <- 
+    str_sub(
+      fnm_ap_raw,
+      start = 1,
+      end = 4
+    )
+  visit <- 
+    str_sub(
+      fnm_ap_raw,
+      start = 6,
+      end = 6
+    )
+  message(
+    "Processing File #", i, " ", id_visit, ":",
+    appendLF = FALSE
+  )
+  
+  #### CHECK 1: make sure corresponding event file of id in subject log is present
+  # if (id %in% char_ap_ids == FALSE) {
+  #   
+  #   message("\n")
+  #   warning("ID ", id, ":\n",
+  #           "    Event file not found or named incorrectly\n",
+  #           call. = FALSE)
+  #   
+  #   next()
+  #   
+  # }
+  # 
+  # inds_ap_raw <- which(char_ap_ids %in% id)
+  # 
+  # path_ap_raw <- paste0(path_ap_event_files,
+  #                       flst_ap_raw[inds_ap_raw])
+  
+  # STEP 1: Clean Raw AP File ----
+  message(
+    "reading...",
+    appendLF = FALSE
+  )
+  tib_ap_raw <-
+    suppressMessages(
+      vroom(
+        file = paste(
+          fpa_ap_raw,
+          fnm_ap_raw,
+          sep = "/"
+        ),
+        delim = ",",
+        progress = FALSE
+      )
+    )
+  tib_ap_raw <- 
+    tib_ap_raw[, c("Time",                                              
+                   "DataCount (samples)",                             
+                   "Interval (s)",                                  
+                   "ActivityCode (0=sedentary, 1=standing, 2=stepping)",
+                   "CumulativeStepCount",                      
+                   "Activity Score (MET.h)")]
+  colnames(tib_ap_raw) <-
+    c("time",
+      "datacount",
+      "interval",
+      "activity",
+      "cumulativesteps",
+      "methrs")
+  tib_ap_raw$time <- 
+    str_replace(
+      tib_ap_raw$time,
+      pattern = "#",
+      replacement = ""
+    )
+  tib_ap_raw$time <- 
+    str_replace(
+      tib_ap_raw$time,
+      pattern = "#",
+      replacement = ""
+    )
+  # all(
+  #   sub(
+  #     pattern = "#",
+  #     replacement = "",
+  #     tib_ap_raw$time
+  #   ) ==
+  #     str_replace(
+  #       tib_ap_raw$time,
+  #       pattern = "#",
+  #       replacement = ""
+  #     )
+  # )
+  # tib_ap_raw$time <- sub("#", "", tib_ap_raw$time)
+  # tib_ap_raw$time <- sub("#", "", tib_ap_raw$time)
+  
+  # event files have half the actual number of steps for some reason
+  tib_ap_raw$cumulativesteps <- tib_ap_raw$cumulativesteps * 2
+  # all(
+  #   (tib_ap_raw[, "cumulativesteps"] * 2) == (tib_ap_raw[, 5] * 2)
+  # )
+  
+  # make sure event file is not corrupt
+  nrw_ap_raw1 <- nrow(tib_ap_raw)
+  tib_ap_raw  <- tib_ap_raw[!(tib_ap_raw$time == "1899-12-30"), ]
+  tib_ap_raw  <- tib_ap_raw[!(tib_ap_raw$time == "0"), ]
+  nrw_ap_raw2 <- nrow(tib_ap_raw)		
+  
+  # Change from Julian time to UTC
+  if(is.character(tib_ap_raw$time) == TRUE &
+     nrw_ap_raw1 == nrw_ap_raw2) {
+    
+    # convert from Julian date to UTC date time. For some reason, UTC time is
+    # actually relevant time zone.
+    tib_ap_raw$time <- 
+      as.double(tib_ap_raw$time) %>% 
+      lubridate::as_date(origin = "1899-12-30") %>% 
+      lubridate::as_datetime(tz = "UTC") %>% 
+      lubridate::force_tz(tzone = "America/Chicago")      
+    
+    # attributes(tib_ap_raw$time)
+    # Difference with base R is date time is kept as POSIXct instead of
+    # going back and forth to POSIXlt.
+    # tib_ap_raw$time <- as.numeric(tib_ap_raw$time) %>% 
+    # as.Date(origin = "1899-12-30") %>% 
+    #   as.POSIXct() %>% 
+    #   as.POSIXlt(tz = "UTC") %>% 
+    #   force_tz(tzone = "America/Chicago") %>% 
+    #   as.POSIXct()
+    
+  } else {
+    
+    stop("THIS ISNT SUPPPPPPPOSE TO HAPPPPPPEN")
+    
+  }
+  
+  # test2 <- tib_ap_raw[, c(1, 3)]
+  # test2$interval_hms <- seconds_to_period(test2$interval)
+  # test2$is_dst <- dst(tib_ap_raw$time)
+  # which(duplicated(test2$is_dst) == FALSE)
+  # test2 <- test2[5749:5753, -2]
+  # test2$UTCtime <- with_tz(test2$time,
+  #                          tzone = "UTC")
+  # with_tz(test2$time,
+  #         tzone = "UTC")
+  
+  
+  #### CHECK 2: See if ap file is in on_off_log
+  tib_on_off <- 
+    log_on_off[log_on_off$id == id & log_on_off$visit == visit, ]
+  
+  # AP Event file does not automatically adjust for dst.
+  # Therefore, only rely on first entry for both.
+  dtm_file <- tib_ap_raw$time[1]
+  dtm_visit  <- tib_on_off$date_time_on[1]
+  tib_ap_raw$is_dst <- dst(tib_ap_raw$time)
+  lgl_dst <- unique(tib_ap_raw$is_dst)
+  
+  if (nrow(tib_on_off) == 0) {
+    
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    No entry in on_off_log.\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  # AP files after 11/01/2018 have incorrect date due to outdated
+  # PALStudio WHICH. IS. STILL. BEING. USED. However, applying correction
+  # factor will account for dst for an AP that croses from no-yes/yes-no.
+  if (dtm_visit > as.Date("2018-11-01")) {
+    
+    ### CORRECTION FACTOR ###
+    tib_ap_raw$time <- tib_ap_raw$time + 3106.8918*24*60*60
+    
+    # after testing all files were at least 6 sec off
+    tib_ap_raw$time <- tib_ap_raw$time + 6 
+    
+    # daylight savings
+    if (dst(dtm_file) == FALSE &
+        dst(dtm_visit) == TRUE) {
+      
+      # n-y: substract 1 hour because it is ahead
+      tib_ap_raw$time <- tib_ap_raw$time - 60*60 
+      
+    } else if (dst(dtm_file) == TRUE &
+               dst(dtm_visit) == FALSE) {
+      
+      # y-n: add 1 hour because it is behind
+      tib_ap_raw$time <- tib_ap_raw$time + 60*60
+      
+    }
+    
+  } else if (length(lgl_dst) == 2) {
+    
+    # For AP files that switch from y-n or n-yes, must add/remove an hour.
+    ind_dst <- which(duplicated(tib_ap_raw$is_dst) == FALSE)[2]
+    # which(duplicated(tib_ap_raw$is_dst) == FALSE)
+    # which(duplicated(tib_ap_raw$is_dst, fromLast = T) == FALSE)
+    
+    if (lgl_dst[1] == FALSE) {
+      
+      # n-y: add one hour when dst is TRUE
+      tib_ap_raw$time[ind_dst:nrw_ap_raw2] <- 
+        tib_ap_raw$time[ind_dst:nrw_ap_raw2] + 60*60
+      
+    } else if (lgl_dst[1] == TRUE) {
+      
+      # y-n: subtract one hour when dst is FALSE
+      tib_ap_raw$time[ind_dst:nrw_ap_raw2] <- 
+        tib_ap_raw$time[ind_dst:nrw_ap_raw2] - 60*60
+      
+    }
+    
+  }
+  
+  # STEP 2: Second by Second ----
+  message(
+    "sec-by-sec...",
+    appendLF = FALSE
+  )  
+  
+  # OLD
+  # test <- tibble(
+  #   og    = tib_ap_raw$interval,
+  #   diff  = times2,
+  #   og_round = round(
+  #     tib_ap_raw$interval,
+  #     digits = 0
+  #   ),
+  #   diff_round  = round(
+  #     int_event_time,
+  #     digits = 0
+  #   ),
+  #   lgl   = (og_round == diff_round),
+  #   .rows = nrw_ap_raw2
+  # )
+  # test2 <- 
+  #   test[test$lgl == FALSE, ]
+  # og_round <- round(
+  #   tib_ap_raw$interval,
+  #   digits = 0
+  # )
+  # difftime(
+  #   (tib_ap_raw$time[nrw_ap_raw2] + tib_ap_raw$interval[nrw_ap_raw2]),
+  #   tib_ap_raw$time[1],
+  #   units = "secs"
+  # )
+  # sum(tib_ap_raw$interval)
+  # sum(times2)
+  # sum(int_event_time)
+  # sum(og_round)
+  # 
+  # time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+  #                                                format="%Y-%m-%d %H:%M:%S"),
+  #                                       strptime(raw_ap$time[seq_len(n - 1)],
+  #                                                format="%Y-%m-%d %H:%M:%S"),
+  #                                       units = "secs"))
+  # time_each_event <- c(time_each_event,
+  #                      round(raw_ap[n,"interval"],
+  #                            0))
+  # time_each_event[is.na(time_each_event) == T] <- 1
+  # all(
+  #   as.vector(
+  #     difftime(
+  #       tib_ap_raw$time[seq_len(nrw_ap_raw2 - 1) + 1],
+  #       tib_ap_raw$time[seq_len(nrw_ap_raw2 - 1)],
+  #       units = "secs"
+  #     )
+  #   ) ==
+  #     diff.POSIXt(
+  #       tib_ap_raw$time,
+  #       lag = 1,
+  #       differences = 1
+  #     )
+  # )
+  # int_event_time <- 
+  #   c(int_event_time,
+  #     tib_ap_raw$interval[nrw_ap_raw2])
+  # int_event_time <- 
+  #   round(
+  #     int_event_time,
+  #     digits = 0
+  #   )
+  # tib_ap_raw <- 
+  #   add_row(
+  #     tib_ap_raw,
+  #     time            = (
+  #       tib_ap_raw$time[nrw_ap_raw2] +
+  #         tib_ap_raw$interval[nrw_ap_raw2]
+  #     ),
+  #     interval        = 0,
+  #     activity        = tib_ap_raw$activity[nrw_ap_raw2],
+  #     cumulativesteps = tib_ap_raw$cumulativesteps[nrw_ap_raw2],
+  #     methrs          = 0
+  #   )
+  # raw_dtm_strpd <-
+  #   strptime(
+  #     raw_dtm,
+  #     format = "%Y-%m-%d %H:%M:%OS"
+  #   ) %>%
+  #   as.POSIXct(tz = "America/Chicago")
+  # int_event_time <- 
+  #   as.vector(
+  #     diff.POSIXt(
+  #       raw_dtm_strpd,
+  #       lag = 1,
+  #       differences = 1
+  #     )
+  #   )
+  # sbs_int_events <- 
+  #   rep(
+  #     seq_along(int_event_time),
+  #     times = int_event_time
+  #   )
+  # sbs_int_acts <- 
+  #   as.integer(
+  #     rep(
+  #       tib_ap_raw$activity,
+  #       times = int_event_time
+  #     )
+  #   )
+  # sbs_dbl_steps <- 
+  #   rep(
+  #     tib_ap_raw$cumulativesteps,
+  #     times = int_event_time
+  #   )
+  # dtm_start <- raw_dtm_strpd[1]
+  # test <- 
+  #   seq.POSIXt(
+  #     dtm_start,
+  #     by = "secs",
+  #     length.out = nrw_ap_sbs
+  #   )
+  # sbs_dtm_times <- dtm_start + (0:(nrw_ap_sbs - 1))
+  # all(
+  #   test == sbs_dtm_times
+  # )
+  # tib_ap_raw$interval <- as.numeric(tib_ap_raw$interval)
+  # tib_ap_raw$methrs <- as.numeric(tib_ap_raw$methrs)
+  # sbs_dbl_methrs <- tib_ap_raw$methrs / tib_ap_raw$interval 	
+  # sbs_dbl_methrs <- rep(sbs_dbl_methrs,
+  #                        times = int_event_time)
+  # sbs_dbl_mets <- tib_ap_raw$methrs * 3600 / tib_ap_raw$interval
+  # sbs_dbl_mets <- rep(sbs_dbl_mets,
+  #                      times = int_event_time)
+  
+  # Create dtm vector where last entry is time[nrow] + interval[nrow] for diff
+  # function. Do it this way as previous method of adding in the rounded
+  # interval[nrow] to stripped time does not take into account fractional
+  # seconds.
+  raw_dtm <- 
+    c(tib_ap_raw$time,
+      tib_ap_raw$time[nrw_ap_raw2] + tib_ap_raw$interval[nrw_ap_raw2])
+  
+  # To make sec-by-sec, take the difference between each time and the previous
+  # time. Do this with the "strptimed" date-time's as this will account for 
+  # added fractional seconds. Not doing so will result in a sbs file less 
+  # than 2 hours for visits. This will also make time entries exactly equal to
+  # on and off times.
+  # seconds(tib_ap_raw$time[1])
+  raw_dtm_strpd <-
+    raw_dtm %>% 
+    strptime(format = "%Y-%m-%d %H:%M:%OS") %>%
+    as.POSIXct(tz = "America/Chicago")
+  int_event_time <- 
+    raw_dtm_strpd %>% 
+    diff.POSIXt(
+      lag = 1,
+      differences = 1
+    ) %>% 
+    as.vector()
+  int_event_time[is.na(int_event_time)] <- 1
+  int_event_time <- as.integer(int_event_time)
+  
+  # make sbs variables:
+  sbs_int_events <- 
+    int_event_time %>% 
+    seq_along() %>% 
+    rep(times = int_event_time)
+  sbs_int_acts <- 
+    tib_ap_raw$activity %>% 
+    rep(times = int_event_time) %>% 
+    as.integer()
+  sbs_dbl_steps <-
+    tib_ap_raw$cumulativesteps %>% 
+    rep(times = int_event_time) %>% 
+    as.double()
+  nrw_ap_sbs <- length(sbs_int_events)
+  sbs_dtm_times <- 
+    seq.POSIXt(
+      from = raw_dtm_strpd[1],
+      by = "secs",
+      length.out = nrw_ap_sbs
+    )
+  sbs_dte_dates <- date(sbs_dtm_times)
+  
+  # The met hours per second in the interval.
+  sbs_dbl_methrs <- 
+    (tib_ap_raw$methrs / tib_ap_raw$interval) %>% 
+    rep(times = int_event_time)
+  
+  # To compute mets per second in the interval, multiply methours by 3600 sec/hour
+  # and divide by number of seconds.
+  sbs_dbl_mets <- 
+    (tib_ap_raw$methrs * 3600 / tib_ap_raw$interval) %>% 
+    rep(times = int_event_time)
+  
+  # ap_sbs
+  tib_ap_sbs <- 
+    tibble(
+      time       = sbs_dtm_times,
+      date       = sbs_dte_dates,
+      ap_posture = sbs_int_acts,
+      mets       = sbs_dbl_mets,
+      met_hours  = sbs_dbl_methrs,
+      steps      = sbs_dbl_steps,
+      num_events = sbs_int_events,
+      .rows      = nrw_ap_sbs
+    )
+  tib_ap_sbs$mets <- 
+    signif(
+      tib_ap_sbs$mets,
+      digits = 3
+    )
+  
+  #	STEP 3: Label on off times ----
+  message(
+    "off-times...",
+    appendLF = FALSE
+  )
+  tib_ap_sbs$off <- 1
+  nrw_on_off <- nrow(tib_on_off)
+  dbl_sec_applied <- vector(mode = "double",
+                            length = nrw_on_off)
+  
+  #	If on/off times recorded - loop through and label time monitor is not worn.
+  for (i in seq_len(nrw_on_off)) {
+    
+    dtm_on  <- tib_on_off$date_time_on[i]
+    dtm_off <- tib_on_off$date_time_off[i]
+    
+    # Can use integer subsetting as time should never have an NA at this point.
+    ind_on <- 
+      tib_ap_sbs$time %>% 
+      dplyr::between(
+        left = dtm_on,
+        right = dtm_off
+      ) %>% 
+      which()
+    # test <- 
+    #   which(
+    #     (tib_ap_sbs$time >= dtm_on) &
+    #       (tib_ap_sbs$time <= dtm_off)
+    #   )
+    # test2 <- 
+    #   ind_on <- 
+    #   tib_ap_sbs$time %>% 
+    #   between(
+    #     left = dtm_on,
+    #     right = dtm_off
+    #   ) %>% 
+    #   which()
+    # all(
+    #   test == test2
+    # )
+    
+    # Tells us if the on interval was actually applied to AP (IMG) file. Substract
+    # one because it includes on time.
+    dbl_sec_applied[i] <- length(ind_on) - 1
+    
+    if (length(ind_on) > 0) {
+      
+      tib_ap_sbs$off[ind_on] <- 0
+      
+      # If on interval goes past midnight, make all the dates the first date
+      # of the on interval.
+      tib_ap_sbs$date[ind_on] <- tib_ap_sbs$date[ind_on][1]
+      
+    }
+  }
+  
+  #### CHECK 3: see if off times were actually labeled.
+  dbl_sec_on <- tib_on_off$seconds_on
+  
+  # In the event an on interval overlapped another on interval (take out extra
+  # "zero" seconds).
+  int_sec_worn <- sum(tib_ap_sbs$off == 0) - nrw_on_off
+  int_sec_applied_all <- as.integer(sum(dbl_sec_applied))
+  
+  if (int_sec_applied_all <= 0 ||
+      int_sec_worn <= 0) {
+    
+    # none of the AP (IMG) file has any of the log entries.
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    Event file and on_off_log entries do not match at all.\n",
+            "    AP likely not worn at all or corrupt.\n",
+            call. = FALSE)
+    
+    next() 
+    
+  }  else if (all(dbl_sec_on == dbl_sec_applied) == FALSE) {
+    
+    # AP (IMG) partially has on off entry and does not have the rest after.
+    message("\n")
+    ind_mis_part <- 
+      which(
+        dbl_sec_on != dbl_sec_applied &
+          dbl_sec_applied != -1
+      )
+    ind_mis_full <- 
+      which(
+        dbl_sec_on != dbl_sec_applied &
+          dbl_sec_applied == -1
+      )
+    chr_entries_log <- 
+      apply(
+        log_on_off[, 1:4],
+        MARGIN = 1,
+        FUN = paste,
+        collapse = " "
+      )
+    chr_entries_visit <- 
+      apply(
+        tib_on_off[, 1:4],
+        MARGIN = 1,
+        FUN = paste,
+        collapse = " "
+      )
+    ind_log_part <- 
+      which(
+        chr_entries_log %in%
+          chr_entries_visit[ind_mis_part]
+      )
+    ind_log_full <- 
+      which(
+        chr_entries_log %in%
+          chr_entries_visit[ind_mis_full]
+      )
+    chr_mis_time_part <- 
+      paste(
+        format.POSIXct(
+          log_on_off$date_time_on[ind_log_part],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        format.POSIXct(
+          log_on_off$date_time_off[ind_log_part],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        sep = " - "
+      )
+    
+    chr_mis_time_full <- 
+      paste(
+        format.POSIXct(
+          log_on_off$date_time_on[ind_log_full],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        format.POSIXct(
+          log_on_off$date_time_off[ind_log_full],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        sep = " - "
+      )
+    
+    for (i in seq_along(ind_log_part)) {
+      
+      mis_num    <- ind_log_part[i]
+      mis_on_off <- chr_mis_time_part[i]
+      
+      warning("AP File ", id_visit, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval partially found in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    for (i in seq_along(ind_log_full)) {
+      
+      mis_num    <- ind_log_full[i]
+      mis_on_off <- chr_mis_time_full[i]
+      
+      warning("AP File ", id_visit, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval not found at all in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    next()
+    
+  } else if (int_sec_worn != int_sec_applied_all) {
+    
+    # on intervals are in AP (IMG) but one on interval overlaps another interval.
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    Event file and on_off_log entries partially match.\n",
+            "    One or more log entries overlap each other.\n",
+            "    Check on_off entries.\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  # STEP 4 : Clean (AVSA Specific) ----
+  message(
+    "cleaning...\n",
+    appendLF = TRUE
+  )
+  
+  # make file with off time cleaned out. REMEMBER! This still includes
+  # the "zero" seconds of each on interval as it is still needed.
+  tib_ap_vis <- tib_ap_sbs[tib_ap_sbs$off == 0, ]
+  tib_ap_vis$id <- id
+  tib_ap_vis$visit <- visit
+  tib_ap_vis <- 
+    tib_ap_vis[ , c("id",
+                    "visit",
+                    "time",
+                    "ap_posture")]
+  
+  # write data frame
+  fnm_ap_clean <- 
+    paste(
+      "FLAC",
+      id_visit,
+      sep = "_"
+    ) %>% 
+    paste0(".csv")
+  vroom::vroom_write(
+    tib_ap_vis,
+    path = paste(
+      fpa_ap_clean,
+      fnm_ap_clean,
+      sep = "/"
+    ),
+    delim = ",",
+    # bom = TRUE,
+    progress = FALSE
+  )
+  
+  cnt_ap <- cnt_ap + 1
+  
+}
+
+message(
+  "--------------------------------Done Processing--------------------------------\n",
+  "                              ", cnt_ap - 1, " files processed.\n",
+  "\n",
+  "File times are in UTC.\n",
+  appendLF = TRUE
+)
+
+
+
 # testing daylight conversion -----------------------------------------------------
 on_off_log <- "visit_on_off_log.csv"
 
