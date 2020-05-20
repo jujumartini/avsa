@@ -1,5 +1,6 @@
-read_on_off_log <- function(path,
-                            name_log) {
+read_on_off_log <- 
+  function(path,
+           name_log) {
   
   # path = "./3_data/raw"
   # name_log = "visit_on_off_log.csv"
@@ -163,10 +164,8 @@ read_on_off_log <- function(path,
 
 
 read_timestamps <- 
-  function(
-    fpa_timestamps,
-    fnm_timestamps
-  ) {
+  function(fpa_timestamps,
+           fnm_timestamps) {
   
   # fpa_timestamps <- "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp"
   # fnm_timestamps <- "TimeStamps.csv"
@@ -237,17 +236,18 @@ read_timestamps <-
 
 
 
-process_annotation <- function(fpa_img_raw,
-                               fpa_img_clean,
-                               fls_img_raw,
-                               tib_cor_time,
-                               log_on_off) {
+process_annotation <- 
+  function(fpa_img_raw,
+           fpa_img_clean,
+           fls_img_raw,
+           tib_cor_time,
+           log_on_off) {
   
   # fls_img_raw <- list_anno
   # tib_cor_time <- timestamps
   # log_on_off <- on_off_log
-  # fpa_img_raw <- "./3_data/raw/annotation/"
-  # fpa_img_clean <- "./3_data/processed/anno_clean/"
+  # fpa_img_raw <- "./3_data/raw/annotation"
+  # fpa_img_clean <- "./3_data/processed/anno_clean"
   # which(str_detect(fls_img_raw, pattern = "1068V1"))
   # fnm_img_raw <- fls_img_raw[1]
   
@@ -258,48 +258,60 @@ process_annotation <- function(fpa_img_raw,
     
     fnm_img_raw <- fls_img_raw[i]
     
-    stu_sub_vis <- sub("\\_P.*",
-                       "",
-                       fnm_img_raw)
-    id <- as.integer(substr(fnm_img_raw, 6, 9))
-    visit <- as.integer(substr(fnm_img_raw, 11, 11))
+    stu_sub_vis <-
+      sub("\\_P.*",
+          "",
+          fnm_img_raw)
+    id <- 
+      fnm_img_raw %>%
+      str_sub(start = 6,
+              end = 9) %>%
+      as.integer()
+    visit <-
+      fnm_img_raw %>%
+      str_sub(start = 11,
+              end = 11) %>%
+      as.integer()
+    message("Processing File #", i, ": ", stu_sub_vis,
+            appendLF = TRUE)
     
-    message("Processing File #", i, " ", stu_sub_vis, ": ",
+    # STEP 1: raw ----
+    message("    Reading...",
             appendLF = FALSE)
-    
-    #### STEP 1: raw
-    message("reading...",
-            appendLF = FALSE)
-    
     tib_img_raw <- suppressMessages(
-      vroom(file = paste0(fpa_img_raw, 
-                          fnm_img_raw),
-            delim = ",",
-            progress = FALSE)
+      c(fpa_img_raw, fnm_img_raw) %>%
+        paste(collapse = "/") %>%
+        vroom(delim = ",",
+              progress = FALSE)
     )
+
+    # Consistency: make all lowercase and _ seperator.
+    colnames(tib_img_raw) <-
+      colnames(tib_img_raw) %>%
+      str_to_lower() %>%
+      str_replace(pattern = "time",
+                  replacement = "_time")
     
-    # raw_anno <- read.table(file = paste0(fpa_img_raw, 
-    #                                      fnm_img_raw),
-    #                        header = T,
-    #                        sep = ",")
-    # 
-    # raw_anno$startTime <- ymd_hms(raw_anno$startTime,
-    #                               tz="UTC")
-    # raw_anno$endTime <- ymd_hms(raw_anno$endTime,
-    #                             tz="UTC")
-    tib_img_raw$startTime <- with_tz(tib_img_raw$startTime,
-                                     tzone = "America/Chicago")
-    tib_img_raw$endTime <- with_tz(tib_img_raw$endTime,
-                                   tzone = "America/Chicago")
+    # Oxford Image Browser outputs in UTC. Convert to CDT/CST to see if
+    # correction factors work interactively.
+    tib_img_raw$start_time <-
+      tib_img_raw$start_time %>%
+      lubridate::with_tz(tzone = "America/Chicago")
+    tib_img_raw$end_time <-
+      tib_img_raw$end_time %>%
+      lubridate::with_tz(tzone = "America/Chicago")
     
     # merge times and raw
     tib_img_raw$id <- id
     tib_img_raw$visit = visit
     
-    tib_img_mer <- merge(tib_img_raw,
-                         tib_cor_time,
-                         by = c("id",
-                                "visit"))
+    tib_img_mer <-
+      merge(
+        tib_img_raw,
+        tib_cor_time,
+        by = c("id",
+               "visit")
+      )
     
     # check#1: See if timestamp was entered
     if (all(is.na(tib_img_mer$difference))) {
@@ -315,21 +327,20 @@ process_annotation <- function(fpa_img_raw,
     }
     
     # add diff to times
-    tib_img_mer$NEWstarttime <- tib_img_mer$startTime + tib_img_mer$difference
-    tib_img_mer$NEWendtime <- tib_img_mer$endTime + tib_img_mer$difference
+    tib_img_mer$new_start_time <-
+      tib_img_mer$start_time + tib_img_mer$difference
+    tib_img_mer$new_end_time <-
+      tib_img_mer$end_time + tib_img_mer$difference
     
     # Need to strptime as there are fractional seconds in the start/end times.
     # padr cannot fill in gaps with fractional seconds.
-    
-    # seconds(tib_img_mer$NEWstarttime[1])
-    
-    tib_img_mer$NEWstarttime <- 
-      strptime(tib_img_mer$NEWstarttime,
-               format = "%Y-%m-%d %H:%M:%OS") %>% 
+    tib_img_mer$new_start_time <- 
+      tib_img_mer$new_start_time %>% 
+      strptime(format = "%Y-%m-%d %H:%M:%OS") %>% 
       as.POSIXct(tz = "America/Chicago")
-    tib_img_mer$NEWendtime <- 
-      strptime(tib_img_mer$NEWendtime,
-               format = "%Y-%m-%d %H:%M:%OS") %>% 
+    tib_img_mer$new_end_time <- 
+      tib_img_mer$new_end_time %>% 
+      strptime(format = "%Y-%m-%d %H:%M:%OS") %>% 
       as.POSIXct(tz = "America/Chicago")
     
     # write a "check" csv file to see if stopwatch matches NEW start time
@@ -338,21 +349,26 @@ process_annotation <- function(fpa_img_raw,
                 sep = ",",
                 row.names = F)
     
-    # STEP 2: second by second
-    message("sec-by-sec...",
-            appendLF = FALSE)  
+    # STEP 2: second by second ----
+    message("Sec-By-Sec...",
+            appendLF = FALSE)
     
     cnt_sbs <- 1
     nrw_img_mer <- nrow(tib_img_mer)
     
     for (i in seq_len(nrw_img_mer)) {
       
-      sbs_dtm_img <- seq.POSIXt(from = tib_img_mer$NEWstarttime[i],
-                                to = tib_img_mer$NEWendtime[i],
-                                by = "sec")
-      sbs_ano_img <- rep(tib_img_mer$annotation[i],
-                         times = length(sbs_dtm_img))
-      
+      sbs_dtm_img <-
+        seq.POSIXt(
+          from = tib_img_mer$new_start_time[i],
+          to = tib_img_mer$new_end_time[i],
+          by = "sec"
+        )
+      sbs_ano_img <- 
+        rep(
+          tib_img_mer$annotation[i],
+          times = length(sbs_dtm_img)
+        )
       tib_img_sbs_part <- 
         tibble(
           time       = sbs_dtm_img,
@@ -374,25 +390,29 @@ process_annotation <- function(fpa_img_raw,
       
     }
     
-    tib_img_sbs <- 
-      suppressMessages(bind_rows(lst_sbs_part) %>% 
-                         pad())
+    tib_img_sbs <- suppressMessages(
+      bind_rows(lst_sbs_part) %>% 
+        pad()
+    )
     
     tib_img_sbs$date <- date(tib_img_sbs$time)
     
     # Need to change NA's to gap just in case for any int subsetting.
     tib_img_sbs$annotation[is.na(tib_img_sbs$annotation)] <- "gap"
     
-    ####	STEP 3: Label on off times
-    message("off-times...",
+    # STEP 3: Label on off times ----
+    message("Off-Times...",
             appendLF = FALSE)
     
     tib_img_sbs$off <- 1
-    
-    tib_on_off <- log_on_off[log_on_off$ID == id & log_on_off$Visit == visit, ]
+    tib_on_off <-
+      log_on_off[log_on_off$id == id & log_on_off$visit == visit, ]
     nrw_on_off <- nrow(tib_on_off)
-    dbl_sec_applied <- vector(mode = "double",
-                              length = nrw_on_off)
+    dbl_sec_applied <-
+      vector(
+        mode = "double",
+        length = nrw_on_off
+      )
     
     #	If on/off times recorded - loop through and label time monitor is not worn.
     for (i in seq_len(nrw_on_off)) {
@@ -401,11 +421,11 @@ process_annotation <- function(fpa_img_raw,
       dtm_off <- tib_on_off$date_time_off[i]
       
       # Can use integer subsetting as time should never have an NA at this point.
-      ind_on <- which(
-        (tib_img_sbs$time >= dtm_on) &
-          (tib_img_sbs$time <= dtm_off)
-      )
-      
+      ind_on <- 
+        tib_img_sbs$time %>%
+        dplyr::between(left = dtm_on,
+                       right = dtm_off) %>%
+        which()
       
       # Tells us if the on interval was actually applied to AP (IMG) file. Substract
       # one because it includes on time.
@@ -427,41 +447,50 @@ process_annotation <- function(fpa_img_raw,
     
     # In the event an on interval overlapped another on interval (take out extra
     # "zero" seconds).
-    int_sec_worn <- sum(tib_img_sbs$off == 0) - nrw_on_off
-    int_sec_applied_all <- as.integer(sum(dbl_sec_applied))
+    int_sec_worn <- 
+      sum(tib_img_sbs$off == 0) - nrw_on_off
+    int_sec_applied_all <- 
+      dbl_sec_applied %>% 
+      sum() %>% 
+      as.integer()
     
     if (int_sec_applied_all <= 0 ||
         int_sec_worn <= 0) {
       
       # none of the AP (IMG) file has any of the log entries.
       message("\n")
-      warning("IMG File ", stu_sub_vis, ":\n",
-              "    Event file and on_off_log entries do not match at all.\n",
-              "    AP likely not worn at all or corrupt.\n",
-              call. = FALSE)
+      warning(
+        "IMG File ", stu_sub_vis, ":\n",
+        "    Event file and on_off_log entries do not match at all.\n",
+        "    AP likely not worn at all or corrupt.\n",
+        call. = FALSE
+      )
       
       next() 
       
     }  else if (all(dbl_sec_on == dbl_sec_applied) == FALSE) {
       
       # For IMG file, still process IMG file but give warnings to check IMG set.
-      dtm_img_last <- tib_img_mer$NEWendtime[nrw_img_mer]
-      
-      lgl_1st_img_ok <- dtm_img_last < tib_on_off$date_time_off[nrw_on_off]
-      
-      dtm_img_first <- tib_img_mer$NEWstarttime[1]
-      
-      lgl_last_img_ok <- dtm_img_first < tib_on_off$date_time_on[1]
+      dtm_img_last <- 
+        tib_img_mer$new_end_time[nrw_img_mer]
+      lgl_1st_img_ok <- 
+        dtm_img_last < tib_on_off$date_time_off[nrw_on_off]
+      dtm_img_first <- 
+        tib_img_mer$new_start_time[1]
+      lgl_last_img_ok <- 
+        dtm_img_first < tib_on_off$date_time_on[1]
       
       if (lgl_1st_img_ok == TRUE &
           lgl_last_img_ok == TRUE) {
         
         # Autographer likely died early.
-        warning("IMG File ", stu_sub_vis, ":\n",
-                "    Last IMG timestamp before visit end time.\n",
-                "    IMG file still processed BUT make sure no off stopwatch/clipboard\n",
-                "    is seen in IMG set.\n",
-                call. = FALSE)
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    Last IMG timestamp before visit end time.\n",
+          "    IMG file still processed BUT make sure no off stopwatch/clipboard\n",
+          "    is seen in IMG set.\n",
+          call. = FALSE
+        )
         
       }
       
@@ -469,11 +498,13 @@ process_annotation <- function(fpa_img_raw,
           lgl_last_img_ok == FALSE) {
         
         # Autographer was not started before visit.
-        warning("IMG File ", stu_sub_vis, ":\n",
-                "    First IMG timestamp is after visit start time.\n",
-                "    IMG file still processed BUT make sure no on stopwatch/clipboard\n",
-                "    is seen in IMG set.\n",
-                call. = FALSE)
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    First IMG timestamp is after visit start time.\n",
+          "    IMG file still processed BUT make sure no on stopwatch/clipboard\n",
+          "    is seen in IMG set.\n",
+          call. = FALSE
+        )
         
       }
       
@@ -481,122 +512,56 @@ process_annotation <- function(fpa_img_raw,
           lgl_last_img_ok == TRUE) {
         
         # Autographer was not started before visit and died early. Suspect.
-        warning("IMG File ", stu_sub_vis, ":\n",
-                "    Last IMG timestamp before visit end time AND\n",
-                "    First IMG timestamp is after visit start time.\n",
-                "    IMG file still processed BUT make sure no on or off\n",
-                "    stopwatch/clipboard is seen in IMG set.\n",
-                call. = FALSE)
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    Last IMG timestamp before visit end time AND\n",
+          "    First IMG timestamp is after visit start time.\n",
+          "    IMG file still processed BUT make sure no on or off\n",
+          "    stopwatch/clipboard is seen in IMG set.\n",
+          call. = FALSE
+        )
         
       }
-      
-      # # AP (IMG) partially has on off entry and does not have the rest after.
-      # message("\n")
-      # 
-      # ind_mis_part <- which(dbl_sec_on != dbl_sec_applied &
-      #                         dbl_sec_applied != -1)
-      # 
-      # ind_mis_full <- which(dbl_sec_on != dbl_sec_applied &
-      #                         dbl_sec_applied == -1)
-      # 
-      # chr_entries_log <- apply(log_on_off[, 1:4],
-      #                          MARGIN = 1, 
-      #                          FUN = paste,
-      #                          collapse = " ")
-      # chr_entries_visit <- apply(tib_on_off[, 1:4],
-      #                            MARGIN = 1, 
-      #                            FUN = paste,
-      #                            collapse = " ")
-      # 
-      # ind_log_part <- which(
-      #   chr_entries_log %in% 
-      #     chr_entries_visit[ind_mis_part]
-      # )
-      # ind_log_full <- which(
-      #   chr_entries_log %in% 
-      #     chr_entries_visit[ind_mis_full]
-      # )
-      # 
-      # chr_mis_time_part <- paste(
-      #   format.POSIXct(log_on_off$date_time_on[ind_log_part],
-      #                  format = "%m/%d/%Y %H:%M:%S"),
-      #   format.POSIXct(log_on_off$date_time_off[ind_log_part],
-      #                  format = "%m/%d/%Y %H:%M:%S"),
-      #   sep = " - "
-      # )
-      # 
-      # chr_mis_time_full <- paste(
-      #   format.POSIXct(log_on_off$date_time_on[ind_log_full],
-      #                  format = "%m/%d/%Y %H:%M:%S"),
-      #   format.POSIXct(log_on_off$date_time_off[ind_log_full],
-      #                  format = "%m/%d/%Y %H:%M:%S"),
-      #   sep = " - "
-      # )
-      # 
-      # for (i in seq_along(ind_log_part)) {
-      #   
-      #   mis_num    <- ind_log_part[i]
-      #   mis_on_off <- chr_mis_time_part[i]
-      #   
-      #   warning("IMG File ", stu_sub_vis, ":\n",
-      #           "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
-      #           "    Interval partially found in Event File.\n",
-      #           "    Fix entry or remove file.\n",
-      #           call. = FALSE)
-      #   
-      # }
-      # 
-      # for (i in seq_along(ind_log_full)) {
-      #   
-      #   mis_num    <- ind_log_full[i]
-      #   mis_on_off <- chr_mis_time_full[i]
-      #   
-      #   warning("IMG File ", stu_sub_vis, ":\n",
-      #           "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
-      #           "    Interval not found at all in Event File.\n",
-      #           "    Fix entry or remove file.\n",
-      #           call. = FALSE)
-      #   
-      # }
-      # 
-      # next()
       
     } else if (int_sec_worn != int_sec_applied_all) {
       
       # on intervals are in AP (IMG) but one on interval overlaps another interval.
       message("\n")
-      warning("IMG File ", stu_sub_vis, ":\n",
-              "    Event file and on_off_log entries partially match.\n",
-              "    One or more log entries overlap each other.\n",
-              "    Check on_off entries.\n",
-              call. = FALSE)
+      warning(
+        "IMG File ", stu_sub_vis, ":\n",
+        "    Event file and on_off_log entries partially match.\n",
+        "    One or more log entries overlap each other.\n",
+        "    Check on_off entries.\n",
+        call. = FALSE
+      )
       
       next()
       
     }
     
-    #### STEP 4 : Clean (AVSA specific)
-    message("cleaning...\n")
-    
-    tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0, ]
-    
-    # attributes(tib_img_vis$ID)
-    # class(tib_img_vis$annotation)
-    
+    # STEP 4 : Clean (AVSA specific) ----
+    message("Cleaning...\n",
+            appendLF = TRUE)
+    tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0,]
     tib_img_vis$id <- id
     tib_img_vis$visit <- visit
-    
-    uncodeable <- c("uncodeable;0001 camera start time",
-                    "uncodeable;0002 camera stop time",
-                    "uncodeable;0003 camera taken or turned off",
-                    "uncodeable;0004 image dark/blurred/obscured")
-    
-    ind_sit <- which(tib_img_vis$annotation == "posture;0006 sitting")
-    ind_sta <- which(tib_img_vis$annotation == "posture;0007 standing")
-    ind_mov <- which(tib_img_vis$annotation == "posture;0008 movement")
-    ind_gap <- which(tib_img_vis$annotation == "gap")
-    ind_tra <- which(tib_img_vis$annotation == "transition;0005 less than 3 images")
-    ind_unc <- which(tib_img_vis$annotation %in% uncodeable)
+    uncodeable <- 
+      c("uncodeable;0001 camera start time",
+        "uncodeable;0002 camera stop time",
+        "uncodeable;0003 camera taken or turned off",
+        "uncodeable;0004 image dark/blurred/obscured")
+    ind_sit <-
+      which(tib_img_vis$annotation == "posture;0006 sitting")
+    ind_sta <- 
+      which(tib_img_vis$annotation == "posture;0007 standing")
+    ind_mov <- 
+      which(tib_img_vis$annotation == "posture;0008 movement")
+    ind_gap <- 
+      which(tib_img_vis$annotation == "gap")
+    ind_tra <- 
+      which(tib_img_vis$annotation == "transition;0005 less than 3 images")
+    ind_unc <- 
+      which(tib_img_vis$annotation %in% uncodeable)
     
     if(length(ind_sit) +
        length(ind_sta) +
@@ -616,34 +581,42 @@ process_annotation <- function(fpa_img_raw,
     tib_img_vis$annotation[ind_gap] <- "3"
     tib_img_vis$annotation[ind_tra] <- "4"
     tib_img_vis$annotation[ind_unc] <- "5"
-    
-    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0006 sitting"] <- "0"
-    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0007 standing"] <- "1"
-    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0008 movement"] <- "2"
-    # tib_img_vis$annotation[tib_img_vis$annotation == "gap"] <- "3"
-    # tib_img_vis$annotation[tib_img_vis$annotation == "transition;0005 less than 3 images"] <- "4"
-    # tib_img_vis$annotation[tib_img_vis$annotation %in% uncodeable] <- "5"
-    
-    tib_img_vis <-tib_img_vis[, c("id",
-                                  "visit",
-                                  "time",
-                                  "date",
-                                  "annotation")]
+    tib_img_vis <- 
+      tib_img_vis[, c("id",
+                      "visit",
+                      "time",
+                      "date",
+                      "annotation")]
     
     # write table
-    vroom_write(tib_img_vis,
-                path = paste0(fpa_img_clean,
-                              stu_sub_vis,
-                              ".csv"),
-                delim = ",",
-                progress = FALSE)
+    fnm_img_clean <- 
+      paste(
+        "FLAC",
+        id,
+        paste0("V", visit),
+        "IMG.csv",
+        sep = "_"
+      )
+    vroom_write(
+      tib_img_vis,
+      path = paste(fpa_img_clean,
+                   fnm_img_clean,
+                   sep = "/"),
+      delim = ",",
+      progress = FALSE
+    )
     
     cnt_img_processed <- cnt_img_processed + 1
     
   }
   
-  message("--------------------------------Done Processing--------------------------------\n",
-          "                              ", cnt_img_processed - 1, " files processed.\n")
+  message(
+    "--------------------------------Done Processing--------------------------------\n",
+    "                              ", cnt_img_processed - 1, " files processed.\n",
+    "\n",
+    "File times are in UTC.\n",
+    appendLF = TRUE
+  )
   
 }
 
@@ -697,45 +670,29 @@ process_activpal2 <- function(fpa_ap_raw,
     
     fnm_ap_raw <- fls_ap_raw[i]
     id_visit <-
-      str_sub(
-        fnm_ap_raw,
-        start = 1,
-        end = 6
-      )
+      fnm_ap_raw %>% 
+      str_sub(start = 1,
+              end = 6)
     id <- 
-      str_sub(
-        fnm_ap_raw,
-        start = 1,
-        end = 4
-      )
+      fnm_ap_raw %>% 
+      str_sub(start = 1,
+              end = 4)
     visit <- 
-      str_sub(
-        fnm_ap_raw,
-        start = 6,
-        end = 6
-      )
-    message(
-      "Processing File #", i, " ", id_visit, ":",
-      appendLF = FALSE
-    )
+      fnm_ap_raw %>% 
+      str_sub(start = 6,
+              end = 6)
+    message("Processing File #", i, ": ", id_visit,
+            appendLF = TRUE)
     
     # STEP 1: Clean Raw AP File ----
-    message(
-      "reading...",
-      appendLF = FALSE
+    message("    Reading...",
+            appendLF = FALSE)
+    tib_ap_raw <- suppressMessages(
+      c(fpa_ap_raw, fnm_ap_raw) %>% 
+        paste(collapse = "/") %>% 
+        vroom(delim = ",",
+              progress = FALSE)
     )
-    tib_ap_raw <-
-      suppressMessages(
-        vroom(
-          file = paste(
-            fpa_ap_raw,
-            fnm_ap_raw,
-            sep = "/"
-          ),
-          delim = ",",
-          progress = FALSE
-        )
-      )
     tib_ap_raw <- 
       tib_ap_raw[, c("Time",                                              
                      "DataCount (samples)",                             
@@ -751,24 +708,17 @@ process_activpal2 <- function(fpa_ap_raw,
         "cumulativesteps",
         "methrs")
     tib_ap_raw$time <- 
-      str_replace(
-        tib_ap_raw$time,
-        pattern = "#",
-        replacement = ""
-      )
+      tib_ap_raw$time %>% 
+      str_replace(pattern = "#",
+                  replacement = "")
     tib_ap_raw$time <- 
-      str_replace(
-        tib_ap_raw$time,
-        pattern = "#",
-        replacement = ""
-      )
+      tib_ap_raw$time %>% 
+      str_replace(pattern = "#",
+                  replacement = "")
 
     # event files have half the actual number of steps for some reason
     tib_ap_raw$cumulativesteps <- tib_ap_raw$cumulativesteps * 2
-    # all(
-    #   (tib_ap_raw[, "cumulativesteps"] * 2) == (tib_ap_raw[, 5] * 2)
-    # )
-    
+
     # make sure event file is not corrupt
     nrw_ap_raw1 <- nrow(tib_ap_raw)
     tib_ap_raw  <- tib_ap_raw[!(tib_ap_raw$time == "1899-12-30"), ]
@@ -807,9 +757,11 @@ process_activpal2 <- function(fpa_ap_raw,
     if (nrow(tib_on_off) == 0) {
       
       message("\n")
-      warning("AP File ", id_visit, ":\n",
-              "    No entry in on_off_log.\n",
-              call. = FALSE)
+      warning(
+        "AP File ", id_visit, ":\n",
+        "    No entry in on_off_log.\n",
+        call. = FALSE
+      )
       
       next()
       
@@ -863,10 +815,8 @@ process_activpal2 <- function(fpa_ap_raw,
     }
     
     # STEP 2: Second by Second ----
-    message(
-      "sec-by-sec...",
-      appendLF = FALSE
-    )  
+    message("Sec-By-Sec...",
+            appendLF = FALSE)
     
     # Create dtm vector where last entry is time[nrow] + interval[nrow] for diff
     # function. Do it this way as previous method of adding in the rounded
@@ -887,10 +837,8 @@ process_activpal2 <- function(fpa_ap_raw,
       as.POSIXct(tz = "America/Chicago")
     int_event_time <- 
       raw_dtm_strpd %>% 
-      diff.POSIXt(
-        lag = 1,
-        differences = 1
-      ) %>% 
+      diff.POSIXt(lag = 1,
+                  differences = 1) %>%
       as.vector()
     int_event_time[is.na(int_event_time)] <- 1
     int_event_time <- as.integer(int_event_time)
@@ -941,16 +889,12 @@ process_activpal2 <- function(fpa_ap_raw,
         .rows      = nrw_ap_sbs
       )
     tib_ap_sbs$mets <- 
-      signif(
-        tib_ap_sbs$mets,
-        digits = 3
-      )
+      tib_ap_sbs$mets %>% 
+      signif(digits = 3)
     
     #	STEP 3: Label on off times ----
-    message(
-      "off-times...",
-      appendLF = FALSE
-    )
+    message("Off-Times...",
+            appendLF = FALSE)
     tib_ap_sbs$off <- 1
     nrw_on_off <- nrow(tib_on_off)
     dbl_sec_applied <- 
@@ -968,10 +912,8 @@ process_activpal2 <- function(fpa_ap_raw,
       # Can use integer subsetting as time should never have an NA at this point.
       ind_on <- 
         tib_ap_sbs$time %>% 
-        dplyr::between(
-          left = dtm_on,
-          right = dtm_off
-        ) %>% 
+        dplyr::between(left = dtm_on,
+                       right = dtm_off) %>%
         which()
 
       # Tells us if the on interval was actually applied to AP (IMG) file. Substract
@@ -995,17 +937,22 @@ process_activpal2 <- function(fpa_ap_raw,
     # In the event an on interval overlapped another on interval (take out extra
     # "zero" seconds).
     int_sec_worn <- sum(tib_ap_sbs$off == 0) - nrw_on_off
-    int_sec_applied_all <- as.integer(sum(dbl_sec_applied))
+    int_sec_applied_all <- 
+      dbl_sec_applied %>% 
+      sum() %>% 
+      as.integer()
     
     if (int_sec_applied_all <= 0 ||
         int_sec_worn <= 0) {
       
       # none of the AP (IMG) file has any of the log entries.
       message("\n")
-      warning("AP File ", id_visit, ":\n",
-              "    Event file and on_off_log entries do not match at all.\n",
-              "    AP likely not worn at all or corrupt.\n",
-              call. = FALSE)
+      warning(
+        "AP File ", id_visit, ":\n",
+        "    Event file and on_off_log entries do not match at all.\n",
+        "    AP likely not worn at all or corrupt.\n",
+        call. = FALSE
+      )
       
       next() 
       
@@ -1078,11 +1025,13 @@ process_activpal2 <- function(fpa_ap_raw,
         mis_num    <- ind_log_part[i]
         mis_on_off <- chr_mis_time_part[i]
 
-        warning("AP File ", id_visit, ":\n",
-                "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
-                "    Interval partially found in Event File.\n",
-                "    Fix entry or remove file.\n",
-                call. = FALSE)
+        warning(
+          "AP File ", id_visit, ":\n",
+          "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+          "    Interval partially found in Event File.\n",
+          "    Fix entry or remove file.\n",
+          call. = FALSE
+        )
 
       }
 
@@ -1091,11 +1040,13 @@ process_activpal2 <- function(fpa_ap_raw,
         mis_num    <- ind_log_full[i]
         mis_on_off <- chr_mis_time_full[i]
 
-        warning("AP File ", id_visit, ":\n",
-                "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
-                "    Interval not found at all in Event File.\n",
-                "    Fix entry or remove file.\n",
-                call. = FALSE)
+        warning(
+          "AP File ", id_visit, ":\n",
+          "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+          "    Interval not found at all in Event File.\n",
+          "    Fix entry or remove file.\n",
+          call. = FALSE
+        )
 
       }
 
@@ -1105,21 +1056,21 @@ process_activpal2 <- function(fpa_ap_raw,
       
       # on intervals are in AP (IMG) but one on interval overlaps another interval.
       message("\n")
-      warning("AP File ", id_visit, ":\n",
-              "    Event file and on_off_log entries partially match.\n",
-              "    One or more log entries overlap each other.\n",
-              "    Check on_off entries.\n",
-              call. = FALSE)
+      warning(
+        "AP File ", id_visit, ":\n",
+        "    Event file and on_off_log entries partially match.\n",
+        "    One or more log entries overlap each other.\n",
+        "    Check on_off entries.\n",
+        call. = FALSE
+      )
       
       next()
       
     }
     
     # STEP 4 : Clean (AVSA Specific) ----
-    message(
-      "cleaning...\n",
-      appendLF = TRUE
-    )
+    message("Cleaning...\n",
+            appendLF = TRUE)
     
     # Make file with off time cleaned out. REMEMBER! This still includes
     # the "zero" seconds of each on interval as it is still needed.
@@ -1137,19 +1088,17 @@ process_activpal2 <- function(fpa_ap_raw,
     fnm_ap_clean <- 
       paste(
         "FLAC",
-        id_visit,
+        id,
+        paste0("V", visit),
+        "AP.csv",
         sep = "_"
-      ) %>% 
-      paste0(".csv")
+      )
     vroom::vroom_write(
       tib_ap_vis,
-      path = paste(
-        fpa_ap_clean,
-        fnm_ap_clean,
-        sep = "/"
-      ),
+      path = paste(fpa_ap_clean,
+                   fnm_ap_clean,
+                   sep = "/"),
       delim = ",",
-      # bom = TRUE,
       progress = FALSE
     )
 
@@ -1528,40 +1477,169 @@ process_irr <- function(anno_file_list,
 
 
 
-merge_anno_ap <- function(list_anno) {
+merge_img_ap <- function(fpa_img_clean,
+                         fpa_ap_clean,
+                         fpa_merged) {
+  
+  # fpa_img_clean <- "./3_data/processed/anno_clean"
+  # fpa_ap_clean <- "./3_data/processed/ap_clean"
+  # fpa_merged <- "./3_data/analysis/merged_anno_ap"
+  # fnm_img <- "FLAC_1002_V3_IMG.csv"
+  
+  fls_img_clean <- 
+    list.files(
+      path = fpa_img_clean,
+      pattern = "FLAC"
+    )
+  fls_ap_clean <- 
+    list.files(
+      path = fpa_ap_clean,
+      pattern = "FLAC"
+    )
+  
+  for (i in seq_along(fls_img_clean)) {
+    
+    fnm_img <- fls_img_clean[i]
+    
+    message("Merging File #", i, ": ", fnm_img, "...",
+            appendLF = FALSE)
 
-  for (i in seq_along(list_anno)) {
+    study_id_visit <- 
+      fnm_img %>% 
+      str_replace(pattern = "_[^_]*$",
+                  replacement = "")
+    lgl_ap_present <- 
+      fls_ap_clean %>% 
+      str_detect(pattern = study_id_visit)
     
-    print(list_anno[i])
-    
-    vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", list_anno[i]),
-                         col_names = T)
-    l <- nrow(vis_anno)
-    id_visit <- substr(list_anno[i], 6, 11)
-    vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
-                       col_names = T)
-    
-    vis_merged <- inner_join(vis_anno,
-                             vis_ap,
-                             by = c("ID", "Visit", "time"))
-    n <- nrow(vis_merged)
-    
-    # Check #1
-    if (l == n) {
+    if (any(lgl_ap_present) == FALSE) {
       
-      # don't need time column anymore since they are matched in time
-      vis_merged <- vis_merged[, -3]
-      write_csv(vis_merged,
-                path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+      # No corresponding activPAl file.
+      message("\n")
+      warning(
+        "IMG File ", fnm_img, ":\n",
+        "    No corresponding AP file found.",
+        .call = FALSE
+      )
       
-    } else {
-      
-      warning(paste(id_visit, "annotation and AP file do not match in time",
-                    sep = " "))
+      next()
       
     }
+    
+    # "^[^_]*_" <- for removing everything before first occurance.
+    ind_ap <- 
+      fls_ap_clean %>% 
+      str_detect(pattern = study_id_visit) %>% 
+      which()
+    fnm_ap <- fls_ap_clean[ind_ap]
+    tib_img <- suppressMessages(
+      c(fpa_img_clean,
+        fnm_img) %>% 
+        paste(collapse = "/") %>% 
+        vroom(delim = ",",
+              progress = FALSE)
+    )
+    tib_ap <- suppressMessages(
+      c(fpa_ap_clean,
+        fnm_ap) %>% 
+        paste(collapse = "/") %>% 
+        vroom(delim = ",",
+              progress = FALSE)
+    )
+
+    tib_merged <- 
+      inner_join(
+        tib_img,
+        tib_ap,
+        by = c("id",
+               "visit",
+               "time", 
+               "date")
+      )
+    
+    nrw_img <- nrow(tib_img)
+    nrw_merged <- nrow(tib_merged)
+    
+    # Check #1
+    if (nrw_img != nrw_merged) {
+      
+      message("\n")
+      warning(
+        study_id_visit, ":\n",
+        "    IMG and AP file do not match in time\n",
+        .call = FALSE
+      )
+      
+      next()
+       
+    }
+    
+    # Remove "on" time as it is not part of data.
+    tib_final <- tib_merged[-1, ]
+    
+    # Don't need time column anymore since they are matched in time.
+    tib_final <- 
+      tib_final[, !(colnames(tib_final) %in% c("time",
+                                               "date"))]
+    
+    # Write table.
+    fnm_merged <- 
+      paste0(
+        study_id_visit,
+        ".csv"
+      )
+    vroom_write(
+      tib_merged,
+      path = paste(fpa_merged, 
+                   fnm_merged, 
+                   sep = "/"),
+      delim = ",")
+    
+    message("done\n",
+            appendLF = )
+    
   }
+  
+  
+  
 }
+
+
+
+# merge_anno_ap <- function(list_anno) {
+# 
+#   for (i in seq_along(list_anno)) {
+#     
+#     print(list_anno[i])
+#     
+#     vis_anno <- read_csv(file = paste0("./3_data/processed/anno_clean/", list_anno[i]),
+#                          col_names = T)
+#     l <- nrow(vis_anno)
+#     id_visit <- substr(list_anno[i], 6, 11)
+#     vis_ap <- read_csv(file = paste0("./3_data/processed/ap_clean/", id_visit, ".csv"),
+#                        col_names = T)
+#     
+#     vis_merged <- inner_join(vis_anno,
+#                              vis_ap,
+#                              by = c("ID", "Visit", "time"))
+#     n <- nrow(vis_merged)
+#     
+#     # Check #1
+#     if (l == n) {
+#       
+#       # don't need time column anymore since they are matched in time
+#       vis_merged <- vis_merged[, -3]
+#       write_csv(vis_merged,
+#                 path = paste0("./3_data/analysis/merged_anno_ap/", id_visit, ".csv"))
+#       
+#     } else {
+#       
+#       warning(paste(id_visit, "annotation and AP file do not match in time",
+#                     sep = " "))
+#       
+#     }
+#   }
+# }
 
 
 

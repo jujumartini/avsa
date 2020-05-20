@@ -14,25 +14,21 @@ on_off_log <-
 # image Cleaning ----------------------------------------------------------
 
 list_anno <- 
-  toupper(
-    list.files(
-      path = "./3_data/raw/annotation",
-      pattern = ".csv"
-    )
-  )
+  list.files(path = "./3_data/raw/annotation",
+             pattern = ".csv") %>% 
+  str_to_upper()
 timestamps <- 
   read_timestamps(
     fpa_timestamps = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp",
     fnm_timestamps = "TimeStamps.csv"
   )
 process_annotation(
-  fpa_img_raw = "./3_data/raw/annotation/",
-  fpa_img_clean = "./3_data/processed/anno_clean/",
+  fpa_img_raw = "./3_data/raw/annotation",
+  fpa_img_clean = "./3_data/processed/anno_clean",
   fls_img_raw = list_anno,
   tib_cor_time = timestamps,
   log_on_off = on_off_log
 )
-
 
 
 
@@ -59,18 +55,19 @@ process_irr(anno_file_list = list_irr,
             on_off_log = log_on_off)
 
 
+
 # merging -----------------------------------------------------------------
-
-list_anno_clean <- list.files("./3_data/processed/anno_clean/",
-                              pattern = "FLAC")
-
-merge_anno_ap(list_anno = list_anno_clean)
-warnings()
 
 irr_list <- list.files("./3_data/processed/irr_clean",
                        ".csv")
 
 merge_irr(list_irr = irr_list)
+
+merge_img_ap(
+  fpa_img_clean = "./3_data/processed/anno_clean",
+  fpa_ap_clean = "./3_data/processed/ap_clean",
+  fpa_merged = "./3_data/analysis/merged_anno_ap"
+)
 
 
 
