@@ -22,7 +22,7 @@ timestamps <-
     fpa_timestamps = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp",
     fnm_timestamps = "TimeStamps.csv"
   )
-process_annotation(
+clean_annotation_files(
   fpa_img_raw = "./3_data/raw/annotation",
   fpa_img_clean = "./3_data/processed/anno_clean",
   fls_img_raw = list_anno,
@@ -34,7 +34,7 @@ process_annotation(
 
 # activpal cleaning -------------------------------------------------------
 
-process_activpal2(
+clean_activpal_files(
   fpa_ap_raw = "./3_data/raw/events",
   fpa_ap_clean = "./3_data/processed/ap_clean",
   log_on_off = on_off_log,
@@ -73,9 +73,10 @@ merge_img_ap(
 
 # create analysis tables --------------------------------------------------
 
-list_merged <- list.files("./3_data/analysis/merged_anno_ap/", "csv")
-
-analysis_avsa(merged_list = list_merged)
-warnings()
-
-analysis_sedentary(merged_list = list_merged)
+process_avsa_data(
+  fpa_merged = "./3_data/analysis/merged_anno_ap",
+  fpa_processed = "./3_data/analysis",
+  fnm_tbl_minutes = "table_processed_minutes.csv",
+  fnm_tbl_percent = "table_processed_percentage.csv",
+  fnm_tbl_upright = "table_processed_upright.csv"
+)

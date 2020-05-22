@@ -5246,6 +5246,279 @@ if (counter > 1) {
 }
   
 
+# process_avsa_data_OLD ---------------------------------------------------
+# OLD
+# tib_gapless <- tib_og[tib_og$annotation != 3, ] # gaps = 3
+# # fixpoint#1: if a file does not have a posture
+# tib_gapless$annotation <- as.factor(tib_gapless$annotation)
+# tib_gapless$ap_posture <- as.factor((tib_gapless$ap_posture))
+# 
+# anno_levels <- levels(tib_gapless$annotation)
+# ap_levels <- levels(tib_gapless$ap_posture)
+# 
+# if (length(anno_levels) < 4 || length(ap_levels) < 4) {
+#   
+#   event_levels <- union(anno_levels, ap_levels) %>% 
+#     as.integer() %>% 
+#     sort() %>% 
+#     paste()
+#   
+#   # if event_levels has all postures
+#   if (all(c("0", "1", "2", "4") %in% event_levels)) {
+#     
+#     tib_gapless$annotation <- factor(tib_gapless$annotation,
+#                                       levels = event_levels)
+#     tib_gapless$ap_posture<- factor(tib_gapless$ap_posture,
+#                                      levels = event_levels)
+#     
+#     # if there is no sitting in both anno and ap
+#   } else if (all(c("1", "2", "4") %in% event_levels)) {
+#     
+#     event_levels[length(event_levels) + 1] <- "0"
+#     event_levels <- as.integer(event_levels) %>% 
+#       sort() %>% 
+#       paste()
+#     
+#     tib_gapless$annotation <- factor(tib_gapless$annotation,
+#                                       levels = event_levels)
+#     tib_gapless$ap_posture<- factor(tib_gapless$ap_posture,
+#                                      levels = event_levels)
+#     
+#   } 
+# }    
+# 
+# # fixpoint for event
+# tib_event$annotation <- as.factor(tib_event$annotation)
+# tib_event$ap_posture <- as.factor((tib_event$ap_posture))
+# 
+# anno_levels <- levels(tib_event$annotation)
+# ap_levels <- levels(tib_event$ap_posture)
+# 
+# if (length(anno_levels) < 3 || length(ap_levels) < 3) {
+#   
+#   event_levels <- union(anno_levels, ap_levels) %>% 
+#     as.integer() %>% 
+#     sort() %>% 
+#     paste()
+#   
+#   # if event_levels has all postures
+#   if (all(c("0", "1", "2") %in% event_levels)) {
+#     
+#     tib_event$annotation <- factor(tib_event$annotation,
+#                                     levels = event_levels)
+#     tib_event$ap_posture<- factor(tib_event$ap_posture,
+#                                    levels = event_levels)
+#     
+#     # if there is no sitting in both anno and ap
+#   } else if (all(c("1", "2") %in% event_levels)) {
+#     
+#     event_levels[length(event_levels) + 1] <- "0"
+#     event_levels <- as.integer(event_levels) %>% 
+#       sort() %>% 
+#       paste()
+#     
+#     tib_event$annotation <- factor(tib_event$annotation,
+#                                     levels = event_levels)
+#     tib_event$ap_posture<- factor(tib_event$ap_posture,
+#                                    levels = event_levels)
+#     
+#   } 
+# }    
+# TIMES: visit, event, transition (all converted to minutes)
+# time_visit <- (nrow(tib_og) %>%
+#                  as.integer())/60
+# 
+# time_event <- (tib_event %>%
+#                  nrow(.) %>% 
+#                  as.integer())/60
+# 
+# time_trans <- 
+#   (tib_og[tib_og$annotation == 4, ] %>%
+#      nrow(.) %>% 
+#      as.integer())/60
+# 
+# time_gap <- (tib_og[tib_og$annotation == 3, ] %>%
+#                nrow(.) %>% 
+#                as.integer())/60
+# # TIMES: event ap time (for bias), rows = ap
+# time_matr_event <- (table(tib_event$ap_posture,
+#                           tib_event$annotation) %>% 
+#                       addmargins())
+# time_matr_event
+# 
+# time_ap_sit <- time_matr_event[1, 4] # posture times
+# time_ap_sta <- time_matr_event[2, 4]
+# time_ap_mov <- time_matr_event[3, 4]
+# # check to see event and transition equal tib_og. dont include in function
+# all.equal(time_event + time_gap + time_trans,
+#           nrow(tib_og)/60)
+# 
+# TIMES: anno times and (miss)classifications, anno times are same within event and gapless
+# time_matr_gapless <- (table(tib_gapless$ap_posture,
+#                             tib_gapless$annotation) %>% 
+#                         addmargins())
+# time_matr_gapless
+# 
+# time_anno_sit <- time_matr_gapless[5, 1]
+# time_anno_sta <- time_matr_gapless[5, 2]
+# time_anno_mov <- time_matr_gapless[5, 3]
+# 
+# time_agre_ss <- time_matr_gapless[1, 1] # last two letters: first is ap, second is anno, d = stand, t = trans
+# time_miss_sd <- time_matr_gapless[1, 2] # "anno misclassified ap sitting as standing"
+# time_miss_sm <- time_matr_gapless[1, 3] # "anno misclassified ap sitting as movement"
+# 
+# time_miss_ds <- time_matr_gapless[2, 1]
+# time_agre_dd <- time_matr_gapless[2, 2] # "anno agrees with ap standing"
+# time_miss_dm <- time_matr_gapless[2, 3]
+# 
+# time_miss_ms <- time_matr_gapless[3, 1]
+# time_miss_md <- time_matr_gapless[3, 2]
+# time_agre_mm <- time_matr_gapless[3, 3]
+# 
+# time_miss_st <- time_matr_gapless[1, 4] # "transition time when there is ap sitting"
+# time_miss_dt <- time_matr_gapless[2, 4]
+# time_miss_mt <- time_matr_gapless[3, 4]
+# 
+# # TIMES: total ap time and total agree time
+# tot_time_ap_sit <- time_matr_gapless[1, 5]
+# tot_time_ap_sta <- time_matr_gapless[2, 5]
+# tot_time_ap_mov <- time_matr_gapless[3, 5]
+# 
+# time_agre_total <- time_agre_ss + time_agre_dd + time_agre_mm 
+# 
+# # check
+# sum(tib_og$annotation == tib_og$ap_posture)/60 # TRUE = agree, adds all sec they agree
+# all.equal(time_agre_total,
+#           sum(tib_og$annotation == tib_og$ap_posture)/60)
+# table_analysis_time <- 
+#   data.frame(
+#     ID             = id,
+#     Visit          = visit,
+#     visit_time     = time_visit,
+#     event_time     = time_event,
+#     gap_time       = time_gap,
+#     trans_time     = time_trans,
+#     total_agree    = time_agre_total,
+#     event_agree    = time_agre_total,
+#     sit_ap         = time_ap_sit,
+#     sit_anno       = time_anno_sit,
+#     stand_ap       = time_ap_sta,
+#     stand_anno     = time_anno_sta,
+#     move_ap        = time_ap_mov,
+#     move_anno      = time_anno_mov,
+#     total_sit_ap   = tot_time_ap_sit,
+#     total_stand_ap = tot_time_ap_sta,
+#     total_move_ap  = tot_time_ap_mov,
+#     sit_agree      = time_agre_ss,
+#     stand_agree    = time_agre_dd,
+#     move_agree     = time_agre_mm,
+#     sit_trans      = time_miss_st,
+#     stand_trans    = time_miss_dt,
+#     move_trans     = time_miss_mt,
+#     sit_mis_stand  = time_miss_sd,
+#     sit_mis_move   = time_miss_sm,
+#     stand_mis_sit  = time_miss_ds,
+#     stand_mis_move = time_miss_dm,
+#     move_mis_sit   = time_miss_ms,
+#     move_mis_stand = time_miss_md
+#   )
+# # PERCENTAGES: event, transition, total agreement and event agreement
+# perc_event <- time_event/time_visit*100 #
+# perc_trans <- time_trans/time_visit*100
+# perc_gap   <- time_gap/time_visit*100
+# perc_agre_total <-  time_agre_total/time_visit*100 #
+# perc_agre_event <-  time_agre_total/time_event*100 #
+# 
+# # PERCENTAGES: ap and anno of event time
+# perc_matr_event <- (time_matr_event/time_matr_event[, 4])*100 # dividing by ap posture times
+# perc_matr_event
+# 
+# perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+# perc_ap_sta <- time_ap_sta/time_event*100
+# perc_ap_mov <- time_ap_mov/time_event*100
+# perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+# 
+# perc_anno_sit <- time_anno_sit/time_event*100
+# perc_anno_sta <- time_anno_sta/time_event*100
+# perc_anno_mov <- time_anno_mov/time_event*100
+# all.equal(perc_anno_sit + perc_anno_sta + perc_anno_mov,
+#           100)
+# 
+# # PERCENTAGES: (miss)classifications relative to total ap time
+# perc_matr_gapless <- (time_matr_gapless/time_matr_gapless[, 5])*100
+# 
+# perc_agre_ss <- perc_matr_gapless[1, 1] # last two letters: firs is ap, second is anno, d = stand, t = trans
+# perc_miss_sd <- perc_matr_gapless[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+# perc_miss_sm <- perc_matr_gapless[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+# 
+# perc_miss_ds <- perc_matr_gapless[2, 1]
+# perc_agre_dd <- perc_matr_gapless[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+# perc_miss_dm <- perc_matr_gapless[2, 3]
+# 
+# perc_miss_ms <- perc_matr_gapless[3, 1]
+# perc_miss_md <- perc_matr_gapless[3, 2]
+# perc_agre_mm <- perc_matr_gapless[3, 3]
+# 
+# perc_miss_st <- perc_matr_gapless[1, 4] # "##% of TOTAL (non-event) ap sit time classified as transition"
+# perc_miss_dt <- perc_matr_gapless[2, 4]
+# perc_miss_mt <- perc_matr_gapless[3, 4]
+# 
+# # PERCENTAGES: total ap time relative to visit time
+# tot_perc_ap_sit <- tot_time_ap_sit/time_visit*100 # posture percentages of event time
+# tot_perc_ap_sta <- tot_time_ap_sta/time_visit*100
+# tot_perc_ap_mov <- tot_time_ap_mov/time_visit*100
+# tot_perc_ap_mov + tot_perc_ap_sit + tot_perc_ap_sta + perc_gap
+# table_analysis_percentage <- 
+#   data.frame(
+#     ID             = id,
+#     Visit          = visit,
+#     event_time     = perc_event,
+#     gap_time       = perc_gap,
+#     trans_time     = perc_trans,
+#     total_agree    = perc_agre_total,
+#     event_agree    = perc_agre_event,
+#     sit_ap         = perc_ap_sit,
+#     sit_anno       = perc_anno_sit,
+#     stand_ap       = perc_ap_sta,
+#     stand_anno     = perc_anno_sta,
+#     move_ap        = perc_ap_mov,
+#     move_anno      = perc_anno_mov,
+#     total_sit_ap   = tot_perc_ap_sit,
+#     total_stand_ap = tot_perc_ap_sta,
+#     total_move_ap  = tot_perc_ap_mov,
+#     sit_agree      = perc_agre_ss,
+#     stand_agree    = perc_agre_dd,
+#     move_agree     = perc_agre_mm,
+#     sit_trans      = perc_miss_st,
+#     stand_trans    = perc_miss_dt,
+#     move_trans     = perc_miss_mt,
+#     sit_mis_stand  = perc_miss_sd,
+#     sit_mis_move   = perc_miss_sm,
+#     stand_mis_sit  = perc_miss_ds,
+#     stand_mis_move = perc_miss_dm,
+#     move_mis_sit   = perc_miss_ms,
+#     move_mis_stand = perc_miss_md
+#   )
+# vroom_write(table_analysis_time,
+#             path = "./3_data/analysis/table_analysis_time.csv",
+#             delim = ",",
+#             append = F)
+# 
+# vroom_write(table_analysis_percentage,
+#             path = "./3_data/analysis/table_analysis_percentage.csv",
+#             delim = ",",
+#             append = F)
+# vroom_write(table_analysis_time,
+#             path = "./3_data/analysis/table_analysis_time.csv",
+#             delim = ",",
+#             append = T)
+# 
+# vroom_write(table_analysis_percentage,
+#             path = "./3_data/analysis/table_analysis_percentage.csv",
+#             delim = ",",
+#             append = T)
+
+
 
 # analysis_sedentary ------------------------------------------------------
 
