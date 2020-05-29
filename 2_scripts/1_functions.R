@@ -1751,7 +1751,7 @@ process_avsa_data <- function(fpa_merged,
   # fpa_processed <- "./3_data/analysis"
   # fnm_tbl_minutes <- "table_processed_minutes.csv"
   # fnm_tbl_percent <- "table_processed_percentage.csv"
-  # fnm_tbl_upright <- "table_processed_upright.csv"
+  # fnm_tbl_upright <- "table_upright_percentage.csv"
   # fnm_merged <- "FLAC_1002_V3.csv"
   # fnm_merged <- "FLAC_1074_V2.csv" # does not have all ap or img codes
   # fnm_merged <- "FLAC_1052_V2.csv"
@@ -1885,17 +1885,21 @@ process_avsa_data <- function(fpa_merged,
       c(mat_og_sec[2, 2], # correct
         mat_og_sec[2, 1], # mis-sit
         mat_og_sec[2, 3], # mis-mov
-        mat_og_sec[2, 4], # mis-tra
+        mat_og_sec[2, 4], # mis-gap
         mat_og_sec[2, 5], # mis-tra
-        mat_og_sec[3, 6]) # mis-unk
+        mat_og_sec[2, 6]) # mis-unk
     sec_int_confuse_mov <- 
       c(mat_og_sec[3, 3], # correct
         mat_og_sec[3, 1], # mis-sit
         mat_og_sec[3, 2], # mis-sta
-        mat_og_sec[3, 4], # mis-tra
+        mat_og_sec[3, 4], # mis-gap
         mat_og_sec[3, 5], # mis-tra
         mat_og_sec[3, 6]) # mis-unk
 
+    # sum(sec_int_confuse_sit)
+    # sum(sec_int_confuse_sta)
+    # sum(sec_int_confuse_mov)
+    
     # TOTAL PERCENTAGES ----
     message("Percentages...",
             appendLF = FALSE)
@@ -1935,7 +1939,22 @@ process_avsa_data <- function(fpa_merged,
     per_dbl_confuse_sit[is.nan(per_dbl_confuse_sit)] <- 0
     per_dbl_confuse_sta[is.nan(per_dbl_confuse_sta)] <- 0
     per_dbl_confuse_mov[is.nan(per_dbl_confuse_mov)] <- 0
+    
+    per_int_confuse_check <- 
+      c(sum(per_dbl_confuse_sit),
+        sum(per_dbl_confuse_sta),
+        sum(per_dbl_confuse_mov)) %>% 
+      round(digits = 0) %>% 
+      as.integer()
 
+    if (all(per_int_confuse_check %in% c(100L, 0L)) == FALSE) {
+      
+      warning(fnm_merged, "\n",
+              "    fucccccccccccccccccck",
+              call. = FALSE)
+      
+    }
+    
     # UPRIGHT-SEDENTARY PERCENTAGES ----
     message("Upright...",
             appendLF = FALSE)
@@ -1951,7 +1970,13 @@ process_avsa_data <- function(fpa_merged,
         fct_ap_upright %in% c(1, 2)
       )
     fct_ap_upright[ind_ap_upright] <- 1
-    
+    sec_int_ap_sed_total <- 
+      (fct_ap_upright == 0) %>% 
+      sum()
+    sec_int_ap_upr_total <- 
+      (fct_ap_upright == 1) %>% 
+      sum()
+
     # Don't need "2" factor level for matrix.
     fct_img_upright <- 
       fct_img_upright %>% 
@@ -1963,7 +1988,6 @@ process_avsa_data <- function(fpa_merged,
       table(fct_ap_upright,
             fct_img_upright) %>% 
       addmargins()
-    # mat_upright_sec
     per_dbl_confuse_sed <- 
       mat_upright_sec[1, 1:5] /
       mat_upright_sec[1, 6] *
@@ -2016,14 +2040,14 @@ process_avsa_data <- function(fpa_merged,
         confuse_sta_cor = sec_int_confuse_sta[1],
         confuse_sta_sit = sec_int_confuse_sta[2],
         confuse_sta_mov = sec_int_confuse_sta[3],
-        confuse_sta_gap = sec_int_confuse_sit[4],
+        confuse_sta_gap = sec_int_confuse_sta[4],
         confuse_sta_tra = sec_int_confuse_sta[5],
         confuse_sta_unk = sec_int_confuse_sta[6],
         
         confuse_mov_cor = sec_int_confuse_mov[1],
         confuse_mov_sit = sec_int_confuse_mov[2],
         confuse_mov_sta = sec_int_confuse_mov[3],
-        confuse_mov_gap = sec_int_confuse_sit[4],
+        confuse_mov_gap = sec_int_confuse_mov[4],
         confuse_mov_tra = sec_int_confuse_mov[5],
         confuse_mov_unk = sec_int_confuse_mov[6],
         .rows = 1
@@ -2073,6 +2097,9 @@ process_avsa_data <- function(fpa_merged,
         id    = tib_og$id[1],
         visit = tib_og$visit[1],
         
+        total_ap_sed = (sec_int_ap_sed_total / 60),
+        total_ap_upr = (sec_int_ap_upr_total / 60),
+
         confuse_sed_cor = per_dbl_confuse_sed[1],
         confuse_sed_upr = per_dbl_confuse_sed[2],
         confuse_sed_gap = per_dbl_confuse_sed[3],
@@ -2432,16 +2459,41 @@ process_avsa_data <- function(fpa_merged,
 # }
 
 
-create_visit_summary <- function() {
-
-  tib_time <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_time.csv",
-                                      delim = ","))
-  data_percentage <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_percentage.csv",
-                                            delim = ","))
+create_averages_table <- function(fpa_processed,
+                                  fpa_results,
+                                  fnm_tbl_minutes,
+                                  fnm_tbl_percent,
+                                  fnm_tbl_summary,
+                                  fnm_rds_summary) {
+  
+  # fpa_processed <- "./3_data/analysis"
+  # fpa_results <- "./4_results"
+  # fnm_tbl_minutes <- "table_processed_minutes.csv"
+  # fnm_tbl_percent <- "table_processed_percentage.csv"
+  # fnm_tbl_summary <- "table_averages.csv"
+  # fnm_rds_summary <- "table_averages.rds"
+  
+  message("Averaging...",
+          appendLF = FALSE)
+  
+  tib_time <- suppressMessages(
+    c(fpa_processed,
+      fnm_tbl_minutes) %>% 
+      paste0(collapse = "/") %>% 
+      vroom(delim = ",",
+            progress = FALSE)
+  )
+  tib_perc <- suppressMessages(
+    c(fpa_processed,
+      fnm_tbl_percent) %>% 
+      paste0(collapse = "/") %>% 
+      vroom(delim = ",",
+            progress = FALSE)
+  )
   
   # changing Na to 0
   tib_time[is.na(tib_time)] <- 0
-  data_percentage[is.na(data_percentage)] <- 0
+  tib_perc[is.na(tib_perc)] <- 0
   
   # means and sd
   colSd <- function(x, na.rm = T) {
@@ -2465,67 +2517,103 @@ create_visit_summary <- function() {
   avg_times <- colMeans(tib_time)
   sd_times <- colSd(tib_time)
   
-  avg_percs <- colMeans(data_percentage)
-  sd_percs <- colSd(data_percentage)
+  avg_percs <- colMeans(tib_perc)
+  sd_percs <- colSd(tib_perc)
   
   # table of time and perc
-  tbl_sum_vis_time <- bind_rows(avg_times,
+  tbl_sum_time <- bind_rows(avg_times,
                                 sd_times) %>% 
     as.data.frame()
   
-  tbl_sum_vis_perc <- bind_rows(avg_percs,
+  tbl_sum_perc <- bind_rows(avg_percs,
                                 sd_percs) %>% 
     as.data.frame()
   
   # merge table 
-  tbl_sum_vis <- bind_rows(tbl_sum_vis_time,
-                           tbl_sum_vis_perc) %>% 
+  tbl_sum <- bind_rows(tbl_sum_time,
+                       tbl_sum_perc) %>% 
     t() %>% 
     as.data.frame()
   
   # clean
-  colnames(tbl_sum_vis) <- c("mean_min",
+  colnames(tbl_sum) <- c("mean_min",
                              "sd_min",
                              "mean_perc",
                              "sd_perc")
   
-  tbl_sum_vis <- tbl_sum_vis[-(1:2), ]
+  tbl_sum <- tbl_sum[-(1:2), ]
   
-  tbl_sum_vis <- round(tbl_sum_vis, 1)
+  # % of visit time
+  tbl_sum[1:11, 3] <- 
+    tbl_sum[1:11, 1] /
+    tbl_sum[1, 1] *
+    100
   
-  tbl_sum_vis <- rownames_to_column(tbl_sum_vis,
+  # % of event time
+  tbl_sum[12:17, 3] <- 
+    tbl_sum[12:17, 1] /
+    tbl_sum[2, 1] *
+    100
+  
+  tbl_sum$comments <- ""
+  tbl_sum$comments[1:11] <- "% of visit time"
+  tbl_sum$comments[12:17] <- "% of event time"
+  tbl_sum$comments[18:23] <- "% of total ap sit"
+  tbl_sum$comments[24:29] <- "% of total ap stand"
+  tbl_sum$comments[30:35] <- "% of total ap move"
+  
+  tbl_sum <- 
+    tbl_sum[-(36:39), ]
+  
+  tbl_sum[, -5] <- 
+    tbl_sum[, -5] %>% 
+    round(digits = 2)
+  
+  tbl_sum <- rownames_to_column(tbl_sum,
                                     var = "variable")
-  comments <- c(NA               , "% of visit time", "% of visit time", "% of visit time",
-                "% of visit time", "% of event time", "% of event time", "% of event time",
-                "% of event time", "% of event time", "% of event time", "% of event time",
-                "% of visit time", "% of visit time", "% of visit time", "% of ap time",
-                "% of ap time"   , "% of ap time", "% of ap time", "% of ap time",
-                "% of ap time"   , "% of ap time", "% of ap time", "% of ap time",
-                "% of ap time"   , "% of ap time", "% of ap time")
-  
-  tbl_sum_vis$comment <- comments
-  
+
   # write
-  vroom_write(tbl_sum_vis,
-              path = "./4_results/summary_visit.csv",
-              delim = ",")
-  write_rds(tbl_sum_vis,
-            path = "./4_results/summary_visit.rds",
-            compress = "none")
+  vroom_write(
+    tbl_sum,
+    path = paste(fpa_results,
+                 fnm_tbl_summary,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  write_rds(
+    tbl_sum,
+    path = paste(fpa_results,
+                 fnm_rds_summary,
+                 sep = "/"),
+    compress = "none"
+  )
   
-  assign("tbl_sum_vis",
-         tbl_sum_vis,
-         envir = .GlobalEnv)
+  message("DONE!",
+          appendLF = TRUE)
   
 }
 
 
 
 create_bias_table <- function(fpa_processed,
-                              fnm_tbl_minutes) {
+                              fpa_results,
+                              fnm_tbl_minutes,
+                              fnm_tbl_bias_minutes,
+                              fnm_tbl_bias_percent,
+                              fnm_rds_bias_minutes,
+                              fnm_rds_bias_percent) {
   
   # fpa_processed <- "./3_data/analysis"
+  # fpa_results <- "./4_results"
   # fnm_tbl_minutes <- "table_processed_minutes.csv"
+  # fnm_tbl_bias_minutes <- "table_bias_minutes.csv"
+  # fnm_tbl_bias_percent <- "table_bias_percent.csv"
+  # fnm_rds_bias_minutes <- "table_bias_minutes.rds"
+  # fnm_rds_bias_percent <- "table_bias_percent.rds"
+  
+  message("Averaging...",
+          appendLF = FALSE)
   
   tib_time <- suppressMessages(
     c(fpa_processed,
@@ -2543,173 +2631,352 @@ create_bias_table <- function(fpa_processed,
       posture = c("sit",
                   "stand",
                   "move"),
+      img_mean = NA,
+      img_sd   = NA,
+      ap_mean  = NA,
+      ap_sd    = NA,
+      bias     = NA,
+      se       = NA,
+      upper_95_bias = NA,
+      lower_95_bias = NA,
       .rows = 3
     )
-  # data.frame(posture = c("Sit",
-  #                        "Stand",
-  #                        "Move"))
+
+  # AVERAGES ----
   
-  colnames(tib_time)
-  # [1] "id"              "visit"           "visit_time"      "event_time"      "gap_time"       
-  # [6] "trans_time"      "unknown_time"    "total_ap_sit"    "total_ap_sta"    "total_ap_mov"   
-  # [11] "total_img_sit"   "total_img_sta"   "total_img_mov"   "event_ap_sit"    "event_ap_sta"   
-  # [16] "event_ap_mov"    "event_img_sit"   "event_img_sta"   "event_img_mov"   "confuse_sit_cor"
-  # [21] "confuse_sit_sta" "confuse_sit_mov" "confuse_sit_gap" "confuse_sit_tra" "confuse_sit_unk"
-  # [26] "confuse_sta_cor" "confuse_sta_sit" "confuse_sta_mov" "confuse_sta_gap" "confuse_sta_tra"
-  # [31] "confuse_sta_unk" "confuse_mov_cor" "confuse_mov_sit" "confuse_mov_sta" "confuse_mov_gap"
-  # [36] "confuse_mov_tra" "confuse_mov_unk"
+  tbl_bias_minute$img_mean <- 
+    c(mean(tib_time$event_img_sit),
+      mean(tib_time$event_img_sta),
+      mean(tib_time$event_img_mov))
+  tbl_bias_minute$img_sd <- 
+    c(sd(tib_time$event_img_sit),
+      sd(tib_time$event_img_sta),
+      sd(tib_time$event_img_mov))
+  tbl_bias_minute$ap_mean <- 
+    c(mean(tib_time$event_ap_sit),
+      mean(tib_time$event_ap_sta),
+      mean(tib_time$event_ap_mov))
+  tbl_bias_minute$ap_sd <- 
+    c(sd(tib_time$event_ap_sit),
+      sd(tib_time$event_ap_sta),
+      sd(tib_time$event_ap_mov))
   
-  # LEFT OFFF HEERRRRREEE ----------
-  
-  # raw means:
-  
-  tbl_bias_minute$ap_mean  <- c(mean(tib_time$sit_ap),
-                              mean(tib_time$stand_ap),
-                              mean(tib_time$move_ap))
-  tbl_bias_minute$ap_sd    <- c(sd(tib_time$sit_ap),
-                              sd(tib_time$stand_ap),
-                              sd(tib_time$move_ap))
-  tbl_bias_minute$img_mean <- c(mean(tib_time$sit_anno),
-                              mean(tib_time$stand_anno),
-                              mean(tib_time$move_anno))
-  tbl_bias_minute$img_sd   <- c(sd(tib_time$sit_anno),
-                              sd(tib_time$stand_anno),
-                              sd(tib_time$move_anno))
+  # BIAS ----
+  message("Linear Mixed Models...",
+          appendLF = FALSE)
   
   # linear mixed effects model: bias~b0 + b_i + e_ij
-  sitmodel <- lmer(sit_anno - sit_ap ~ 1 + (1|id),
-                   data = tib_time)
-  standmodel <- lmer(stand_anno - stand_ap ~ 1 + (1|id),
-                     data = tib_time)
-  movemodel <- lmer(move_anno - move_ap ~ 1 + (1|id),
-                    data = tib_time)
+  mod_sit <- suppressMessages(
+    lmer(event_img_sit - event_ap_sit ~ 1 + (1|id),
+         data = tib_time)
+  )  
+  mod_sta <- suppressMessages(
+    lmer(event_img_sta - event_ap_sta ~ 1 + (1|id),
+         data = tib_time)
+  )
+  mod_mov <- suppressMessages(
+    lmer(event_img_mov - event_ap_mov ~ 1 + (1|id),
+         data = tib_time)
+  )
   
   # biases are estimated from model
-  tbl_bias_minute$bias <- c(fixef(sitmodel),
-                          fixef(standmodel),
-                          fixef(movemodel))
+  tbl_bias_minute$bias <- 
+    c(fixef(mod_sit),
+      fixef(mod_sta),
+      fixef(mod_mov))
   
   # se is "unexplained variability" in the biases
-  tbl_bias_minute$se <- c(as.data.frame(VarCorr(sitmodel))[2,5],
-                        as.data.frame(VarCorr(standmodel))[2,5],
-                        as.data.frame(VarCorr(movemodel))[2,5])
+  tbl_bias_minute$se <- 
+    c(as.data.frame(VarCorr(mod_sit))[2,5],
+      as.data.frame(VarCorr(mod_sta))[2,5],
+      as.data.frame(VarCorr(mod_mov))[2,5])
   
   # APproximate 95% CIs
-  tbl_bias_minute$upper_95_bias <- tbl_bias_minute$lower_95_bias <- NA
-  tbl_bias_minute[,8:9] <- suppressMessages(rbind(confint(sitmodel,3),
-                                                confint(standmodel,3),
-                                                confint(movemodel,3)))
+  tbl_bias_minute[, 8] <- suppressMessages(
+    rbind(confint(mod_sit,3),
+          confint(mod_sta,3),
+          confint(mod_mov,3))[, 1]
+  )
+  tbl_bias_minute[, 9] <- suppressMessages(
+    rbind(confint(mod_sit,3),
+          confint(mod_sta,3),
+          confint(mod_mov,3))[, 2]
+  )
   
   # % sum table
-  tbl_bias_perc <- tbl_bias_minute
+  tbl_bias_percent <- tbl_bias_minute
   
-  tbl_bias_perc$bias          <- (tbl_bias_minute$bias / tbl_bias_minute$ap_mean)*100
-  tbl_bias_perc$se            <- (tbl_bias_minute$se/tbl_bias_minute$ap_mean)*100
-  tbl_bias_perc$lower_95_bias <- (tbl_bias_minute$lower_95_Bias/tbl_bias_minute$ap_mean)*100
-  tbl_bias_perc$upper_95_bias <- (tbl_bias_minute$upper_95_Bias/tbl_bias_minute$ap_mean)*100
+  tbl_bias_percent$bias <- 
+    (tbl_bias_minute$bias / tbl_bias_minute$ap_mean) *
+    100
+  tbl_bias_percent$se <- 
+    (tbl_bias_minute$se / tbl_bias_minute$ap_mean) *
+    100
+  tbl_bias_percent$lower_95_bias <- 
+    (tbl_bias_minute$lower_95_bias / tbl_bias_minute$ap_mean) *
+    100
+  tbl_bias_percent$upper_95_bias <- 
+    (tbl_bias_minute$upper_95_bias /  tbl_bias_minute$ap_mean) *
+    100
   
-  # round to 1 digit, arbitrarily
-  tbl_bias_minute[,-1] <- round(tbl_bias_minute[,-1], 1)
-  tbl_bias_perc[,-1] <- round(tbl_bias_perc[,-1], 1)
+  # round to 2 digit, arbitrarily
+  tbl_bias_minute[, -1] <- 
+    tbl_bias_minute[, -1] %>% 
+    round(digits = 2)
+  tbl_bias_percent[, -1] <-
+    tbl_bias_percent[, -1] %>% 
+    round(digits = 2)
   
-  # output tables
-  write_rds(tbl_bias_minute,
-            path = "./4_results/posture_bias_time.rds",
-            compress = "none")
-  write_rds(tbl_bias_perc,
-            path = "./4_results/posture_bias_perc.rds",
-            compress = "none")
-  vroom_write(tbl_bias_minute,
-              path = "./4_results/posture_bias_time.csv",
-              delim = ",")
-  vroom_write(tbl_bias_perc,
-              path = "./4_results/posture_bias_perc.csv",
-              delim = ",")
-  
-  assign("tbl_bias_minute",
-         tbl_bias_minute,
-         envir = .GlobalEnv)
-  
-  assign("tbl_bias_perc",
-         tbl_bias_perc,
-         envir = .GlobalEnv)
+  # TABLES ----
+  message("Tables...",
+          appendLF = FALSE)
+  vroom_write(
+    tbl_bias_minute,
+    path = paste(fpa_results,
+                 fnm_tbl_bias_minutes,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  vroom_write(
+    tbl_bias_percent,
+    path = paste(fpa_results,
+                 fnm_tbl_bias_percent,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  readr::write_rds(
+    tbl_bias_minute,
+    path = paste(fpa_results,
+                 fnm_rds_bias_minutes,
+                 sep = "/"),
+    compress = "none"
+  )
+  readr::write_rds(
+    tbl_bias_percent,
+    path = paste(fpa_results,
+                 fnm_rds_bias_percent,
+                 sep = "/"),
+    compress = "none"
+  )
+
+  message("DONE!",
+          appendLF = TRUE)
   
 }
 
 
 
-create_miss_table <- function() {
+create_confusion_table <- function(fpa_processed,
+                                   fpa_results,
+                                   fnm_tbl_minutes,
+                                   fnm_tbl_upright,
+                                   fnm_tbl_cnfuse_minutes,
+                                   fnm_tbl_cnfuse_percent,
+                                   fnm_tbl_cnfuse_upright,
+                                   fnm_rds_cnfuse_minutes,
+                                   fnm_rds_cnfuse_percent,
+                                   fnm_rds_cnfuse_upright) {
   
-  tib_time <- suppressMessages(vroom(file = "./3_data/analysis/table_analysis_time.csv",
-                                      delim = ","))
+  # fpa_processed <- "./3_data/analysis"
+  # fpa_results <- "./4_results"
+  # fnm_tbl_minutes <- "table_processed_minutes.csv"
+  # fnm_tbl_upright <- "table_upright_percentage.csv"
+  # fnm_tbl_cnfuse_minutes <- "table_cnfuse_minutes.csv"
+  # fnm_tbl_cnfuse_percent <- "table_cnfuse_percent.csv"
+  # fnm_tbl_cnfuse_upright <- "table_cnfuse_upright.csv"
+  # fnm_rds_cnfuse_minutes <- "table_cnfuse_minutes.rds"
+  # fnm_rds_cnfuse_percent <- "table_cnfuse_percent.rds"
+  # fnm_rds_cnfuse_upright <- "table_cnfuse_upright.rds"
   
-  tbl_miss_time <- data.frame(Posture = c("Sit",
-                                          "Stand",
-                                          "Move"))
+  # READ ----
+  tib_time <- suppressMessages(
+    c(fpa_processed,
+      fnm_tbl_minutes) %>% 
+      paste0(collapse = "/") %>% 
+      vroom(delim = ",",
+            progress = FALSE)
+  )
+  tib_upr_percent <- suppressMessages(
+    c(fpa_processed,
+      fnm_tbl_upright) %>% 
+      paste0(collapse = "/") %>% 
+      vroom(delim = ",",
+            progress = FALSE)
+  )
   
-  # total ap times
-  tbl_miss_time$ap_total <- c(mean(tib_time$total_sit_ap),
-                              mean(tib_time$total_stand_ap),
-                              mean(tib_time$total_move_ap))
+  # AVERAGE ----
+  message("Averaging...",
+          appendLF = FALSE)
+  tbl_cnfuse_minutes <- 
+    tibble(
+      posture = c("sit",
+                  "stand",
+                  "move"),
+      ap_total   = NA,
+      correct    = NA,
+      sit        = NA,
+      stand      = NA,
+      move       = NA,
+      gap        = NA,
+      transition = NA,
+      unknown    = NA,
+      .rows = 3
+    )
+  tbl_cnfuse_minutes$ap_total <- 
+    c(mean(tib_time$total_ap_sit),
+      mean(tib_time$total_ap_sta),
+      mean(tib_time$total_ap_mov))
   
-  # IMG correct classification
-  tbl_miss_time$img <- c(mean(tib_time$sit_agree),
-                         mean(tib_time$stand_agree),
-                         mean(tib_time$move_agree))
-  
-  # transition misclassification
-  tbl_miss_time$transition <- c(mean(tib_time$sit_trans),
-                                mean(tib_time$stand_trans),
-                                mean(tib_time$move_trans))
-  
-  # posture misclassifications
-  tbl_miss_time$sit   <- c(0,
-                           mean(tib_time$stand_mis_sit),
-                           mean(tib_time$move_mis_sit))
-  
-  tbl_miss_time$stand <- c(mean(tib_time$sit_mis_stand),
-                           0,
-                           mean(tib_time$move_mis_stand))
-  
-  tbl_miss_time$move  <- c(mean(tib_time$sit_mis_move),
-                           mean(tib_time$stand_mis_move),
-                           0)
+  tbl_cnfuse_minutes$correct <- 
+    c(mean(tib_time$confuse_sit_cor),
+      mean(tib_time$confuse_sta_cor),
+      mean(tib_time$confuse_mov_cor))
+  tbl_cnfuse_minutes$sit <- 
+    c(0,
+      mean(tib_time$confuse_sta_sit),
+      mean(tib_time$confuse_mov_sit))
+  tbl_cnfuse_minutes$stand <- 
+    c(mean(tib_time$confuse_sit_sta),
+      0,
+      mean(tib_time$confuse_mov_sta))
+  tbl_cnfuse_minutes$move <- 
+    c(mean(tib_time$confuse_sit_mov),
+      mean(tib_time$confuse_sta_mov),
+      0)
+  tbl_cnfuse_minutes$gap <- 
+    c(mean(tib_time$confuse_sit_gap),
+      mean(tib_time$confuse_sta_gap),
+      mean(tib_time$confuse_mov_gap))
+  tbl_cnfuse_minutes$transition <- 
+    c(mean(tib_time$confuse_sit_tra),
+      mean(tib_time$confuse_sta_tra),
+      mean(tib_time$confuse_mov_tra))
+  tbl_cnfuse_minutes$unknown <- 
+    c(mean(tib_time$confuse_sit_unk),
+      mean(tib_time$confuse_sta_unk),
+      mean(tib_time$confuse_mov_unk))
   
   # percent table
-  tbl_miss_perc <- tbl_miss_time
+  tbl_cnfuse_percent <- tbl_cnfuse_minutes
+  cnm_confuse <- 
+    c("correct",
+      "sit",
+      "stand",
+      "move",
+      "gap",
+      "transition",
+      "unknown")
+  lgl_cnm_confuse <- 
+    colnames(tbl_cnfuse_percent) %in% cnm_confuse
+  tbl_cnfuse_percent[, lgl_cnm_confuse] <- 
+    (tbl_cnfuse_percent[, lgl_cnm_confuse] / tbl_cnfuse_percent$ap_total) *
+    100
+ 
+  # UPRIGHT ----
+  tbl_cnfuse_upright <- 
+    tibble(
+      posture = c("sedentary",
+                  "upright"),
+      ap_total   = NA,
+      correct    = NA,
+      sedentary  = NA,
+      upright    = NA,
+      gap        = NA,
+      transition = NA,
+      unknown    = NA,
+      .rows = 2
+    )
+  tbl_cnfuse_upright$ap_total <- 
+    c(mean(tib_upr_percent$total_ap_sed),
+      mean(tib_upr_percent$total_ap_upr))
+  tbl_cnfuse_upright$correct <- 
+    c(mean(tib_upr_percent$confuse_sed_cor),
+      mean(tib_upr_percent$confuse_upr_cor))
+  tbl_cnfuse_upright$sedentary <- 
+    c(0,
+      mean(tib_upr_percent$confuse_upr_sed))
+  tbl_cnfuse_upright$upright <- 
+    c(mean(tib_upr_percent$confuse_sed_upr),
+      0)
+  tbl_cnfuse_upright$gap <- 
+    c(mean(tib_upr_percent$confuse_sed_gap),
+      mean(tib_upr_percent$confuse_upr_gap))
+  tbl_cnfuse_upright$transition <- 
+    c(mean(tib_upr_percent$confuse_sed_tra),
+      mean(tib_upr_percent$confuse_upr_tra))
+  tbl_cnfuse_upright$unknown <- 
+    c(mean(tib_upr_percent$confuse_sed_unk),
+      mean(tib_upr_percent$confuse_upr_unk))
   
-  tbl_miss_perc[, 3:7] <- (tbl_miss_perc[, 3:7]/tbl_miss_perc$ap_total)*100
-  
-  tbl_miss_perc
+  # TABLES ----
+  message("Tables...",
+          appendLF = FALSE)
   
   # round
-  tbl_miss_time[, -1] <- round(tbl_miss_time[, -1], 1)
-  tbl_miss_perc[, -1] <- round(tbl_miss_perc[, -1], 1)
-
-  # output tables
-  write_rds(tbl_miss_time,
-            path = "./4_results/posture_miss_time.rds",
-            compress = "none")
-  write_rds(tbl_miss_perc,
-            path = "./4_results/posture_miss_perc.rds",
-            compress = "none")
-  vroom_write(tbl_miss_time,
-              path = "./4_results/posture_miss_time.csv",
-              delim = ",")
-  vroom_write(tbl_miss_perc,
-              path = "./4_results/posture_miss_perc.csv",
-              delim = ",")
+  tbl_cnfuse_minutes[, -1] <- 
+    tbl_cnfuse_minutes[, -1] %>% 
+    round(digits = 2)
+  tbl_cnfuse_percent[, -1] <- 
+    tbl_cnfuse_percent[, -1] %>% 
+    round(digits = 2)
+  tbl_cnfuse_upright[, -1] <- 
+    tbl_cnfuse_upright[, -1] %>% 
+    round(digits = 2)
   
-  assign("tbl_miss_time",
-         tbl_miss_time,
-         envir = .GlobalEnv)
+  vroom_write(
+    tbl_cnfuse_minutes,
+    path = paste(fpa_results,
+                 fnm_tbl_cnfuse_minutes,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  vroom_write(
+    tbl_cnfuse_percent,
+    path = paste(fpa_results,
+                 fnm_tbl_cnfuse_percent,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  vroom_write(
+    tbl_cnfuse_upright,
+    path = paste(fpa_results,
+                 fnm_tbl_cnfuse_upright,
+                 sep = "/"),
+    delim = ",",
+    progress = FALSE
+  )
+  readr::write_rds(
+    tbl_cnfuse_minutes,
+    path = paste(fpa_results,
+                 fnm_rds_cnfuse_minutes,
+                 sep = "/"),
+    compress = "none"
+  )
+  readr::write_rds(
+    tbl_cnfuse_percent,
+    path = paste(fpa_results,
+                 fnm_rds_cnfuse_percent,
+                 sep = "/"),
+    compress = "none"
+  )
+  readr::write_rds(
+    tbl_cnfuse_upright,
+    path = paste(fpa_results,
+                 fnm_rds_cnfuse_upright,
+                 sep = "/"),
+    compress = "none"
+  )
   
-  assign("tbl_miss_perc",
-         tbl_miss_perc,
-         envir = .GlobalEnv)
-  
+  message("DONE!",
+          appendLF = TRUE)
   
 }
+
+
 
 create_sedentary_tables <- function() {
   

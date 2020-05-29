@@ -78,5 +78,5 @@ process_avsa_data(
   fpa_processed = "./3_data/analysis",
   fnm_tbl_minutes = "table_processed_minutes.csv",
   fnm_tbl_percent = "table_processed_percentage.csv",
-  fnm_tbl_upright = "table_processed_upright.csv"
+  fnm_tbl_upright = "table_upright_percentage.csv"
 )
