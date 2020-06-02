@@ -1,5 +1,46 @@
-anno_list
 
+# read_on_off_log - Test 2 ------------------------------------------------
+
+read_on_off_log <- function(path,
+                            name_log) {
+  
+  # path <- "./3_data/raw/"
+  # name_log <- "visit_on_off_log.csv"
+  
+  on_off_raw <- suppressMessages(vroom(file = paste0(path,
+                                                     name_log),
+                                       delim = ","))
+  
+  colnames(on_off_raw) <- str_replace_all(colnames(on_off_raw),
+                                          pattern = "\\.",
+                                          replacement = "_")
+  
+  on_off_raw$date_time_on <- 
+    make_datetime(
+      year  = on_off_raw$date_on_year,
+      month = on_off_raw$date_on_month,
+      day   = on_off_raw$date_on_day,
+      hour  = on_off_raw$time_on_hour,
+      min   = on_off_raw$time_on_minute,
+      sec   = on_off_raw$time_on_seconds,
+      tz    = "America/Chicago"
+    )
+  on_off_raw$date_time_off <- 
+    make_datetime(
+      year  = on_off_raw$date_off_year,
+      month = on_off_raw$date_off_month,
+      day   = on_off_raw$date_off_day,
+      hour  = on_off_raw$time_off_hour,
+      min   = on_off_raw$time_off_minute,
+      sec   = on_off_raw$time_off_seconds,
+      tz    = "America/Chicago"
+    )
+  
+  assign("log_on_off",
+         on_off_raw,
+         envir = .GlobalEnv)
+
+}
 
 # process_anno - Test 1 --------------------------------------------------------
 
@@ -583,121 +624,965 @@ sbs <- function(i) {
 }
 
 # create processed anno files
-  print(test)
-  
-  raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", test),
-                         header = T,
-                         sep = ",")
-  
-  raw_anno$startTime <- ymd_hms(raw_anno$startTime,
-                                tz="UTC")
-  raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+print(test)
+
+raw_anno <- read.table(file = paste0("./3_data/raw/annotation/", test),
+                       header = T,
+                       sep = ",")
+
+raw_anno$startTime <- ymd_hms(raw_anno$startTime,
                               tz="UTC")
-  raw_anno$startTime <- with_tz(raw_anno$startTime,
-                                tz = "America/Chicago")
-  raw_anno$endTime <- with_tz(raw_anno$endTime,
+raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                            tz="UTC")
+raw_anno$startTime <- with_tz(raw_anno$startTime,
                               tz = "America/Chicago")
+raw_anno$endTime <- with_tz(raw_anno$endTime,
+                            tz = "America/Chicago")
+
+# merge times and raw
+id <- as.integer(substr(test, 6, 9))
+visit <- as.integer(substr(test, 11, 11))
+raw_anno$ID <- id
+raw_anno$Visit = visit
+mer_anno <- merge(raw_anno,
+                  corr_times,
+                  by = c("ID",
+                         "Visit"))
+
+# check#1: See if timestamp was entered
+if (dim(mer_anno)[1] == 0) {
   
-  # merge times and raw
-  id <- as.integer(substr(test, 6, 9))
-  visit <- as.integer(substr(test, 11, 11))
-  raw_anno$ID <- id
-  raw_anno$Visit = visit
-  mer_anno <- merge(raw_anno,
-                    corr_times,
-                    by = c("ID",
-                           "Visit"))
+  message("Error: Annotation does not have an entry in Timestamps.csv")
   
-  # check#1: See if timestamp was entered
-  if (dim(mer_anno)[1] == 0) {
+} else {
+  
+  # add diff to times
+  mer_anno$NEWstarttime <- NA
+  mer_anno <- mer_anno %>%
+    mutate(NEWstarttime = if_else(!is.na(Difference),
+                                  startTime + Difference,
+                                  startTime))
+  mer_anno$NEWendtime <- NA
+  mer_anno <- mer_anno %>%
+    mutate(NEWendtime = if_else(!is.na(Difference),
+                                endTime + Difference,
+                                endTime))
+  
+  # to POSIXlt for padding later 
+  mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                    format="%Y-%m-%d %H:%M:%OS")
+  mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                  format="%Y-%m-%d %H:%M:%OS")
+  
+  # write a "check" csv file to see if stopwatch matches NEW start time
+  write.table(mer_anno,
+              file = paste0("./3_data/processed/anno_check/", id, "V", visit, ".csv"),
+              sep = ",",
+              row.names = F)
+  
+  # sbs
+  n <- nrow(mer_anno)
+  l <- lapply(1:n, sbs)
+  sbs_anno <- Reduce(rbind, l) %>% 
+    pad()
+  
+  # changing NA's to transition;gap
+  levels <- levels(sbs_anno$annotation)
+  levels[length(levels) + 1] <- "transition;gap"
+  sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                levels = levels)
+  sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
+  
+  # on off times
+  on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
+  on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+  off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+  
+  #	label off times
+  sbs_anno$off <- 1
+  n <- dim(sbs_anno)[1]
+  class(sbs_anno$time)
+  inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+  sbs_anno$off[inds] <- 0
+  
+  # check#2: see if off times were actually labeled
+  inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
+  i <- length(inds_worn)
+  if(i == 0) {
     
-    message("Error: Annotation does not have an entry in Timestamps.csv")
+    message("Error: Stopwatch Timestamp or on-off entry is incorrect")
     
   } else {
     
-    # add diff to times
-    mer_anno$NEWstarttime <- NA
-    mer_anno <- mer_anno %>%
-      mutate(NEWstarttime = if_else(!is.na(Difference),
-                                    startTime + Difference,
-                                    startTime))
-    mer_anno$NEWendtime <- NA
-    mer_anno <- mer_anno %>%
-      mutate(NEWendtime = if_else(!is.na(Difference),
-                                  endTime + Difference,
-                                  endTime))
+    # Clean - avsa specific
+    vis_anno <- sbs_anno[sbs_anno$off == 0, ] # remove off times
+    vis_anno$time <- as.POSIXct(vis_anno$time, 
+                                tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+    vis_anno$ID <- id # add in ID
+    vis_anno$Visit <- visit # add in Visit number
+    vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+    vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+    vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+    vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+    vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
+    vis_anno <-vis_anno[, c("ID",
+                            "Visit",
+                            "time",
+                            "annotation")]
     
-    # to POSIXlt for padding later 
-    mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
-                                      format="%Y-%m-%d %H:%M:%OS")
-    mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
-                                    format="%Y-%m-%d %H:%M:%OS")
+    # write table
+    write.table(vis_anno,
+                file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
+                sep = ",",
+                row.names = F)
+  }
+}
+
+
+
+# process_anno - Test 5 ---------------------------------------------------
+# break into sequences for easy traceback on where errors will occur 
+
+# anno_file_list <- list_anno
+# corr_times <- timestamps
+# on_off_log <- log_on_off
+fpa_img_raw <- "./3_data/raw/annotation/"
+fpa_img_clean <- "./3_data/processed/anno_clean/"
+fnm_img_raw <- anno_file_list[1]
+
+cnt_img_processed <- 1
+
+# create processed anno files
+for (i in seq_along(anno_file_list)) {
+  
+  fnm_img_raw <- anno_file_list[i]
+  
+  stu_sub_vis <- sub("\\_P.*",
+                   "",
+                   fnm_img_raw)
+  id <- as.integer(substr(fnm_img_raw, 6, 9))
+  visit <- as.integer(substr(fnm_img_raw, 11, 11))
+  
+  message("Processing File #", i, " : ", stu_sub_vis, "...",
+          appendLF = FALSE)
+  
+  #### STEP 1: raw
+  message("reading...",
+          appendLF = FALSE)
+  
+  tib_img_raw <- vroom(file = paste0(fpa_img_raw, 
+                                     fnm_img_raw),
+                       delim = ",")
+  
+  # raw_anno <- read.table(file = paste0(fpa_img_raw, 
+  #                                      fnm_img_raw),
+  #                        header = T,
+  #                        sep = ",")
+  # 
+  # raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+  #                               tz="UTC")
+  # raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+  #                             tz="UTC")
+  tib_img_raw$startTime <- with_tz(tib_img_raw$startTime,
+                                tzone = "America/Chicago")
+  tib_img_raw$endTime <- with_tz(tib_img_raw$endTime,
+                              tzone = "America/Chicago")
+  
+  # merge times and raw
+  tib_img_raw$ID <- id
+  tib_img_raw$Visit = visit
+  
+  tib_img_mer <- merge(tib_img_raw,
+                       corr_times,
+                       by = c("ID",
+                              "Visit"))
+  
+  # check#1: See if timestamp was entered
+  if (all(is.na(tib_img_mer$Difference))) {
+    
+    message("\n")
+    
+    warning("IMG File ", stu_sub_vis, ":\n",
+            "    Annotation file does not have an entry in Timestamps.csv\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  # add diff to times
+  tib_img_mer$NEWstarttime <- tib_img_mer$startTime + tib_img_mer$Difference
+  tib_img_mer$NEWendtime <- tib_img_mer$endTime + tib_img_mer$Difference
+  
+  # Need to strptime as there are fractional seconds in the start/end times.
+  # padr cannot fill in gaps with fractional seconds.
+  
+  # seconds(tib_img_mer$NEWstarttime[1])
+  
+  tib_img_mer$NEWstarttime <- 
+    strptime(tib_img_mer$NEWstarttime,
+             format = "%Y-%m-%d %H:%M:%OS") %>% 
+    as.POSIXct(tz = "America/Chicago")
+  tib_img_mer$NEWendtime <- 
+    strptime(tib_img_mer$NEWendtime,
+             format = "%Y-%m-%d %H:%M:%OS") %>% 
+    as.POSIXct(tz = "America/Chicago")
+  
+  # write a "check" csv file to see if stopwatch matches NEW start time
+  write.table(tib_img_mer,
+              file = paste0("./3_data/processed/anno_check/",id, "V", visit, ".csv"),
+              sep = ",",
+              row.names = F)
+  
+  # STEP 2: second by second
+  message("sec-by-sec...",
+          appendLF = FALSE)  
+  
+  cnt_sbs <- 1
+  nrw_img_mer <- nrow(tib_img_mer)
+
+  for (i in seq_len(nrw_img_mer)) {
+  
+    sbs_dtm_img <- seq.POSIXt(from = tib_img_mer$NEWstarttime[i],
+                              to = tib_img_mer$NEWendtime[i],
+                              by = "sec")
+    sbs_ano_img <- rep(tib_img_mer$annotation[i],
+                       times = length(sbs_dtm_img))
+    
+    tib_img_sbs_part <- 
+      tibble(
+        time       = sbs_dtm_img,
+        annotation = sbs_ano_img,
+        .rows      = nrow(sbs_dtm_img)
+      )
+    
+    if (cnt_sbs == 1) {
+      
+      lst_sbs_part <- list(tib_img_sbs_part)
+      
+    } else if (cnt_sbs > 1) {
+      
+      lst_sbs_part[[i]] <- tib_img_sbs_part
+      
+    }
+    
+    cnt_sbs <- cnt_sbs + 1
+    
+  }
+  
+  tib_img_sbs <- 
+    suppressMessages(bind_rows(lst_sbs_part) %>% 
+    pad())
+  
+  tib_img_sbs$date <- date(tib_img_sbs$time)
+  
+  # Need to change NA's to gap just in case for any int subsetting.
+  tib_img_sbs$annotation[is.na(tib_img_sbs$annotation)] <- "gap"
+  
+  ####	STEP 3: Label on off times
+  message("off-times...",
+          appendLF = FALSE)
+
+  tib_img_sbs$off <- 1
+  
+  tib_on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
+  nrw_on_off <- nrow(tib_on_off)
+  dbl_sec_worn <- vector(mode = "double",
+                         length = nrw_on_off)
+  
+  #	If on/off times recorded - loop through and label time monitor is not worn.
+  for (i in seq_len(nrw_on_off)) {
+    
+    dtm_on  <- tib_on_off$date_time_on[i]
+    dtm_off <- tib_on_off$date_time_off[i]
+    
+    # Can use integer subsetting as time should never have an NA at this point.
+    ind_on <- which(
+      (tib_img_sbs$time >= dtm_on) &
+      (tib_img_sbs$time <= dtm_off)
+    )
+    
+
+    # tells us if the on interval was actually in the AP file. Substract
+    # one because it includes on time.
+    dbl_sec_worn[i] <- length(ind_on) - 1
+    
+    if (length(ind_on) > 0) {
+      
+      tib_img_sbs$off[ind_on] <- 0
+      
+      # If on interval goes past midnight, make all the dates the first date
+      # of the on interval.
+      tib_img_sbs$date[ind_on] <- tib_img_sbs$date[ind_on][1]
+      
+    }
+  }
+  
+  #### CHECK 3: see if off times were actually labeled.
+  dbl_sec_on <- tib_on_off$seconds_on
+
+  # In the event an on interval overlapped another on interval (take out extra
+  # "zero" seconds).
+  int_sec_applied <- sum(tib_img_sbs$off == 0) - nrw_on_off
+  int_sec_worn_all <- as.integer(sum(dbl_sec_worn))
+  
+  if (int_sec_applied == 0) {
+    
+    # none of the AP file has any of the log entries.
+    message("\n")
+    warning("ID ", id, ":\n",
+            "    Event file and on_off_log entries do not match at all.\n",
+            "    AP likely not worn at all or corrupt.\n",
+            call. = FALSE)
+    
+    next() 
+    
+  }  else if (all(dbl_sec_on == dbl_sec_worn) == FALSE) {
+    
+    # AP partially has on off entry and does not have the rest after.
+    message("\n")
+    
+    ind_mis_part <- which(dbl_sec_on != dbl_sec_worn &
+                             dbl_sec_worn != -1)
+    
+    ind_mis_full <- which(dbl_sec_on != dbl_sec_worn &
+                             dbl_sec_worn == -1)
+    
+    chr_entries_log <- apply(on_off_log[, 1:4],
+                              MARGIN = 1, 
+                              FUN = paste,
+                              collapse = " ")
+    chr_entries_visit <- apply(tib_on_off[, 1:4],
+                                MARGIN = 1, 
+                                FUN = paste,
+                                collapse = " ")
+    
+    ind_log_part <- which(
+      chr_entries_log %in% 
+        chr_entries_visit[ind_mis_part]
+    )
+    ind_log_full <- which(
+      chr_entries_log %in% 
+        chr_entries_visit[ind_mis_full]
+    )
+    
+    chr_mis_time_part <- paste(
+      format.POSIXct(on_off_log$date_time_on[ind_log_part],
+                     format = "%m/%d/%Y %H:%M:%S"),
+      format.POSIXct(on_off_log$date_time_off[ind_log_part],
+                     format = "%m/%d/%Y %H:%M:%S"),
+      sep = " - "
+    )
+    
+    chr_mis_time_full <- paste(
+      format.POSIXct(on_off_log$date_time_on[ind_log_full],
+                     format = "%m/%d/%Y %H:%M:%S"),
+      format.POSIXct(on_off_log$date_time_off[ind_log_full],
+                     format = "%m/%d/%Y %H:%M:%S"),
+      sep = " - "
+    )
+    
+    for (i in seq_along(ind_log_part)) {
+      
+      mis_num    <- ind_log_part[i]
+      mis_on_off <- chr_mis_time_part[i]
+      
+      warning("ID ", id, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval partially found in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    for (i in seq_along(ind_log_full)) {
+      
+      mis_num    <- ind_log_full[i]
+      mis_on_off <- chr_mis_time_full[i]
+      
+      warning("ID ", id, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval not found at all in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    next()
+    
+  } else if (int_sec_applied != int_sec_worn_all) {
+    
+    # on intervals are in AP but one on interval overlaps another interval.
+    message("\n")
+    warning("ID ", id, ":\n",
+            "    Event file and on_off_log entries partially match.\n",
+            "    One or more log entries overlap each other.\n",
+            "    Check on_off entries.\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  #### STEP 4 : Clean (AVSA specific)
+  message("results...\n")
+  
+  tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0, ]
+  
+  attributes(tib_img_vis$ID)
+  class(tib_img_vis$annotation)
+  
+  tib_img_vis$id <- id
+  tib_img_vis$visit <- visit
+
+  uncodeable <- c("uncodeable;0001 camera start time",
+                  "uncodeable;0002 camera stop time",
+                  "uncodeable;0003 camera taken or turned off",
+                  "uncodeable;0004 image dark/blurred/obscured")
+  
+  ind_sit <- which(tib_img_vis$annotation == "posture;0006 sitting")
+  ind_sta <- which(tib_img_vis$annotation == "posture;0007 standing")
+  ind_mov <- which(tib_img_vis$annotation == "posture;0008 movement")
+  ind_gap <- which(tib_img_vis$annotation == "gap")
+  ind_tra <- which(tib_img_vis$annotation == "transition;0005 less than 3 images")
+  ind_unc <- which(tib_img_vis$annotation %in% uncodeable)
+  
+  if(length(ind_sit) +
+    length(ind_sta) +
+    length(ind_mov) +
+    length(ind_gap) +
+    length(ind_tra) +
+    length(ind_unc) != 
+    nrow(tib_img_vis)) {
+    
+    stop()
+    
+  }
+   
+  tib_img_vis$annotation[ind_sit] <- "0"
+  tib_img_vis$annotation[ind_sta] <- "1"
+  tib_img_vis$annotation[ind_mov] <- "2"
+  tib_img_vis$annotation[ind_gap] <- "3"
+  tib_img_vis$annotation[ind_tra] <- "4"
+  tib_img_vis$annotation[ind_unc] <- "5"
+  
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0006 sitting"] <- "0"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0007 standing"] <- "1"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0008 movement"] <- "2"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "gap"] <- "3"
+  # tib_img_vis$annotation[tib_img_vis$annotation == "transition;0005 less than 3 images"] <- "4"
+  # tib_img_vis$annotation[tib_img_vis$annotation %in% uncodeable] <- "5"
+  
+  tib_img_vis <-tib_img_vis[, c("id",
+                                "visit",
+                                "time",
+                                "date",
+                                "annotation")]
+  
+  # write table
+  vroom_write(tib_img_vis,
+              path = paste0(fpa_img_clean,
+                            stu_sub_vis,
+                            ".csv"),
+              delim = ",")
+  
+  cnt_img_processed <- cnt_img_processed + 1
+  
+}
+
+message("--------------------------------Done Processing--------------------------------\n",
+        "                              ", count_ap - 1, " files processed.\n")
+
+
+# process_annotation ------------------------------------------------------
+{
+  
+  # fls_img_raw <- list_anno
+  # tib_cor_time <- timestamps
+  # log_on_off <- on_off_log
+  # fpa_img_raw <- "./3_data/raw/annotation"
+  # fpa_img_clean <- "./3_data/processed/anno_clean"
+  # which(str_detect(fls_img_raw, pattern = "1068V1"))
+  # fnm_img_raw <- fls_img_raw[1]
+  
+  cnt_img_processed <- 1
+  
+  # Loop for each raw annotation file.
+  for (i in seq_along(fls_img_raw)) {
+    
+    fnm_img_raw <- fls_img_raw[i]
+    
+    stu_sub_vis <-
+      sub("\\_P.*",
+          "",
+          fnm_img_raw)
+    id <- 
+      fnm_img_raw %>%
+      str_sub(start = 6,
+              end = 9) %>%
+      as.integer()
+    visit <-
+      fnm_img_raw %>%
+      str_sub(start = 11,
+              end = 11) %>%
+      as.integer()
+    message("Processing File #", i, " ", stu_sub_vis, ": ",
+            appendLF = FALSE)
+    
+    # STEP 1: raw ----
+    message("reading...",
+            appendLF = FALSE)
+    tib_img_raw <- suppressMessages(
+      c(fpa_img_raw, fnm_img_raw) %>%
+        paste(collapse = "/") %>%
+        vroom(delim = ",",
+              progress = FALSE)
+    )
+    #   suppressMessages(
+    #   vroom(
+    #     file = paste0(
+    #       fpa_img_raw, 
+    #       fnm_img_raw
+    #     ),
+    #     delim = ",",
+    #     progress = FALSE
+    #   )
+    # )
+    
+    # raw_anno <- read.table(file = paste0(fpa_img_raw, 
+    #                                      fnm_img_raw),
+    #                        header = T,
+    #                        sep = ",")
+    # 
+    # raw_anno$start_time <- ymd_hms(raw_anno$start_time,
+    #                               tz="UTC")
+    # raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+    #                             tz="UTC")
+    # with_tz(tib_img_raw$start_time,
+    #         tzone = "America/Chicago")
+    # with_tz(tib_img_raw$end_time,
+    #         tzone = "America/Chicago")
+    # strptime(tib_img_mer$new_start_time,
+    #          format = "%Y-%m-%d %H:%M:%OS") %>% 
+    # as.POSIXct(tz = "America/Chicago")
+    # strptime(tib_img_mer$new_end_time,
+    #          format = "%Y-%m-%d %H:%M:%OS") %>% 
+    # as.POSIXct(tz = "America/Chicago")
+    # which(
+    #   (tib_img_sbs$time >= dtm_on) &
+    #     (tib_img_sbs$time <= dtm_off)
+    # )
+    
+    # Consistency: make all lowercase and _ seperator.
+    colnames(tib_img_raw) <-
+      colnames(tib_img_raw) %>%
+      str_to_lower() %>%
+      str_replace(pattern = "time",
+                  replacement = "_time")
+    
+    # Oxford Image Browser outputs in UTC. Convert to CDT/CST to see if
+    # correction factors work interactively.
+    tib_img_raw$start_time <-
+      tib_img_raw$start_time %>%
+      lubridate::with_tz(tzone = "America/Chicago")
+    tib_img_raw$end_time <-
+      tib_img_raw$end_time %>%
+      lubridate::with_tz(tzone = "America/Chicago")
+    
+    # merge times and raw
+    tib_img_raw$id <- id
+    tib_img_raw$visit = visit
+    
+    tib_img_mer <-
+      merge(tib_img_raw,
+            tib_cor_time,
+            by = c("id",
+                   "visit"))
+    
+    # check#1: See if timestamp was entered
+    if (all(is.na(tib_img_mer$difference))) {
+      
+      message("\n")
+      
+      warning("IMG File ", stu_sub_vis, ":\n",
+              "    Annotation file does not have an entry in Timestamps.csv\n",
+              call. = FALSE)
+      
+      next()
+      
+    }
+    
+    # add diff to times
+    tib_img_mer$new_start_time <-
+      tib_img_mer$start_time + tib_img_mer$difference
+    tib_img_mer$new_end_time <-
+      tib_img_mer$end_time + tib_img_mer$difference
+    
+    # Need to strptime as there are fractional seconds in the start/end times.
+    # padr cannot fill in gaps with fractional seconds.
+    
+    # seconds(tib_img_mer$new_start_time[1])
+    
+    tib_img_mer$new_start_time <- 
+      tib_img_mer$new_start_time %>% 
+      strptime(format = "%Y-%m-%d %H:%M:%OS") %>% 
+      as.POSIXct(tz = "America/Chicago")
+    tib_img_mer$new_end_time <- 
+      tib_img_mer$new_end_time %>% 
+      strptime(format = "%Y-%m-%d %H:%M:%OS") %>% 
+      as.POSIXct(tz = "America/Chicago")
     
     # write a "check" csv file to see if stopwatch matches NEW start time
-    write.table(mer_anno,
-                file = paste0("./3_data/processed/anno_check/", id, "V", visit, ".csv"),
+    write.table(tib_img_mer,
+                file = paste0("./3_data/processed/anno_check/",id, "V", visit, ".csv"),
                 sep = ",",
                 row.names = F)
     
-    # sbs
-    n <- nrow(mer_anno)
-    l <- lapply(1:n, sbs)
-    sbs_anno <- Reduce(rbind, l) %>% 
-      pad()
+    # STEP 2: second by second ----
+    message("sec-by-sec...",
+            appendLF = FALSE)
     
-    # changing NA's to transition;gap
-    levels <- levels(sbs_anno$annotation)
-    levels[length(levels) + 1] <- "transition;gap"
-    sbs_anno$annotation <- factor(sbs_anno$annotation,
-                                  levels = levels)
-    sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "transition;gap"
+    cnt_sbs <- 1
+    nrw_img_mer <- nrow(tib_img_mer)
     
-    # on off times
-    on_off <- on_off_log[on_off_log$ID == id & on_off_log$Visit == visit, ]
-    on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
-    off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
-    
-    #	label off times
-    sbs_anno$off <- 1
-    n <- dim(sbs_anno)[1]
-    class(sbs_anno$time)
-    inds <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
-    sbs_anno$off[inds] <- 0
-    
-    # check#2: see if off times were actually labeled
-    inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
-    i <- length(inds_worn)
-    if(i == 0) {
+    for (i in seq_len(nrw_img_mer)) {
       
-      message("Error: Stopwatch Timestamp or on-off entry is incorrect")
+      sbs_dtm_img <-
+        seq.POSIXt(
+          from = tib_img_mer$new_start_time[i],
+          to = tib_img_mer$new_end_time[i],
+          by = "sec"
+        )
+      sbs_ano_img <- 
+        rep(
+          tib_img_mer$annotation[i],
+          times = length(sbs_dtm_img)
+        )
+      tib_img_sbs_part <- 
+        tibble(
+          time       = sbs_dtm_img,
+          annotation = sbs_ano_img,
+          .rows      = nrow(sbs_dtm_img)
+        )
       
-    } else {
+      if (cnt_sbs == 1) {
+        
+        lst_sbs_part <- list(tib_img_sbs_part)
+        
+      } else if (cnt_sbs > 1) {
+        
+        lst_sbs_part[[i]] <- tib_img_sbs_part
+        
+      }
       
-      # Clean - avsa specific
-      vis_anno <- sbs_anno[sbs_anno$off == 0, ] # remove off times
-      vis_anno$time <- as.POSIXct(vis_anno$time, 
-                                  tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
-      vis_anno$ID <- id # add in ID
-      vis_anno$Visit <- visit # add in Visit number
-      vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
-      vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
-      vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
-      vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
-      vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2"))] <- "3"
-      vis_anno <-vis_anno[, c("ID",
-                              "Visit",
-                              "time",
-                              "annotation")]
+      cnt_sbs <- cnt_sbs + 1
       
-      # write table
-      write.table(vis_anno,
-                  file = paste0("./3_data/processed/anno_clean/", id, "V", visit, ".csv"),
-                  sep = ",",
-                  row.names = F)
     }
+    
+    tib_img_sbs <- suppressMessages(
+      bind_rows(lst_sbs_part) %>% 
+        pad()
+    )
+    
+    tib_img_sbs$date <- date(tib_img_sbs$time)
+    
+    # Need to change NA's to gap just in case for any int subsetting.
+    tib_img_sbs$annotation[is.na(tib_img_sbs$annotation)] <- "gap"
+    
+    # STEP 3: Label on off times ----
+    message("off-times...",
+            appendLF = FALSE)
+    
+    tib_img_sbs$off <- 1
+    tib_on_off <-
+      log_on_off[log_on_off$id == id & log_on_off$visit == visit, ]
+    nrw_on_off <- nrow(tib_on_off)
+    dbl_sec_applied <-
+      vector(mode = "double",
+             length = nrw_on_off)
+    
+    #	If on/off times recorded - loop through and label time monitor is not worn.
+    for (i in seq_len(nrw_on_off)) {
+      
+      dtm_on  <- tib_on_off$date_time_on[i]
+      dtm_off <- tib_on_off$date_time_off[i]
+      
+      # Can use integer subsetting as time should never have an NA at this point.
+      ind_on <- 
+        tib_img_sbs$time %>%
+        dplyr::between(left = dtm_on,
+                       right = dtm_off) %>%
+        which()
+      
+      # Tells us if the on interval was actually applied to AP (IMG) file. Substract
+      # one because it includes on time.
+      dbl_sec_applied[i] <- length(ind_on) - 1
+      
+      if (length(ind_on) > 0) {
+        
+        tib_img_sbs$off[ind_on] <- 0
+        
+        # If on interval goes past midnight, make all the dates the first date
+        # of the on interval.
+        tib_img_sbs$date[ind_on] <- tib_img_sbs$date[ind_on][1]
+        
+      }
+    }
+    
+    #### CHECK 3: see if off times were actually labeled.
+    dbl_sec_on <- tib_on_off$seconds_on
+    
+    # In the event an on interval overlapped another on interval (take out extra
+    # "zero" seconds).
+    int_sec_worn <- 
+      sum(tib_img_sbs$off == 0) - nrw_on_off
+    int_sec_applied_all <- 
+      dbl_sec_applied %>% 
+      sum() %>% 
+      as.integer()
+    
+    if (int_sec_applied_all <= 0 ||
+        int_sec_worn <= 0) {
+      
+      # none of the AP (IMG) file has any of the log entries.
+      message("\n")
+      warning(
+        "IMG File ", stu_sub_vis, ":\n",
+        "    Event file and on_off_log entries do not match at all.\n",
+        "    AP likely not worn at all or corrupt.\n",
+        call. = FALSE
+      )
+      
+      next() 
+      
+    }  else if (all(dbl_sec_on == dbl_sec_applied) == FALSE) {
+      
+      # For IMG file, still process IMG file but give warnings to check IMG set.
+      dtm_img_last <- 
+        tib_img_mer$new_end_time[nrw_img_mer]
+      lgl_1st_img_ok <- 
+        dtm_img_last < tib_on_off$date_time_off[nrw_on_off]
+      dtm_img_first <- 
+        tib_img_mer$new_start_time[1]
+      lgl_last_img_ok <- 
+        dtm_img_first < tib_on_off$date_time_on[1]
+      
+      if (lgl_1st_img_ok == TRUE &
+          lgl_last_img_ok == TRUE) {
+        
+        # Autographer likely died early.
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    Last IMG timestamp before visit end time.\n",
+          "    IMG file still processed BUT make sure no off stopwatch/clipboard\n",
+          "    is seen in IMG set.\n",
+          call. = FALSE
+        )
+        
+      }
+      
+      if (lgl_1st_img_ok == FALSE &
+          lgl_last_img_ok == FALSE) {
+        
+        # Autographer was not started before visit.
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    First IMG timestamp is after visit start time.\n",
+          "    IMG file still processed BUT make sure no on stopwatch/clipboard\n",
+          "    is seen in IMG set.\n",
+          call. = FALSE
+        )
+        
+      }
+      
+      if (lgl_1st_img_ok == FALSE &
+          lgl_last_img_ok == TRUE) {
+        
+        # Autographer was not started before visit and died early. Suspect.
+        warning(
+          "IMG File ", stu_sub_vis, ":\n",
+          "    Last IMG timestamp before visit end time AND\n",
+          "    First IMG timestamp is after visit start time.\n",
+          "    IMG file still processed BUT make sure no on or off\n",
+          "    stopwatch/clipboard is seen in IMG set.\n",
+          call. = FALSE
+        )
+        
+      }
+      
+      # # AP (IMG) partially has on off entry and does not have the rest after.
+      # message("\n")
+      # 
+      # ind_mis_part <- which(dbl_sec_on != dbl_sec_applied &
+      #                         dbl_sec_applied != -1)
+      # 
+      # ind_mis_full <- which(dbl_sec_on != dbl_sec_applied &
+      #                         dbl_sec_applied == -1)
+      # 
+      # chr_entries_log <- apply(log_on_off[, 1:4],
+      #                          MARGIN = 1, 
+      #                          FUN = paste,
+      #                          collapse = " ")
+      # chr_entries_visit <- apply(tib_on_off[, 1:4],
+      #                            MARGIN = 1, 
+      #                            FUN = paste,
+      #                            collapse = " ")
+      # 
+      # ind_log_part <- which(
+      #   chr_entries_log %in% 
+      #     chr_entries_visit[ind_mis_part]
+      # )
+      # ind_log_full <- which(
+      #   chr_entries_log %in% 
+      #     chr_entries_visit[ind_mis_full]
+      # )
+      # 
+      # chr_mis_time_part <- paste(
+      #   format.POSIXct(log_on_off$date_time_on[ind_log_part],
+      #                  format = "%m/%d/%Y %H:%M:%S"),
+      #   format.POSIXct(log_on_off$date_time_off[ind_log_part],
+      #                  format = "%m/%d/%Y %H:%M:%S"),
+      #   sep = " - "
+      # )
+      # 
+      # chr_mis_time_full <- paste(
+      #   format.POSIXct(log_on_off$date_time_on[ind_log_full],
+      #                  format = "%m/%d/%Y %H:%M:%S"),
+      #   format.POSIXct(log_on_off$date_time_off[ind_log_full],
+      #                  format = "%m/%d/%Y %H:%M:%S"),
+      #   sep = " - "
+      # )
+      # 
+      # for (i in seq_along(ind_log_part)) {
+      #   
+      #   mis_num    <- ind_log_part[i]
+      #   mis_on_off <- chr_mis_time_part[i]
+      #   
+      #   warning("IMG File ", stu_sub_vis, ":\n",
+      #           "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+      #           "    Interval partially found in Event File.\n",
+      #           "    Fix entry or remove file.\n",
+      #           call. = FALSE)
+      #   
+      # }
+      # 
+      # for (i in seq_along(ind_log_full)) {
+      #   
+      #   mis_num    <- ind_log_full[i]
+      #   mis_on_off <- chr_mis_time_full[i]
+      #   
+      #   warning("IMG File ", stu_sub_vis, ":\n",
+      #           "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+      #           "    Interval not found at all in Event File.\n",
+      #           "    Fix entry or remove file.\n",
+      #           call. = FALSE)
+      #   
+      # }
+      # 
+      # next()
+      
+    } else if (int_sec_worn != int_sec_applied_all) {
+      
+      # on intervals are in AP (IMG) but one on interval overlaps another interval.
+      message("\n")
+      warning(
+        "IMG File ", stu_sub_vis, ":\n",
+        "    Event file and on_off_log entries partially match.\n",
+        "    One or more log entries overlap each other.\n",
+        "    Check on_off entries.\n",
+        call. = FALSE
+      )
+      
+      next()
+      
+    }
+    
+    # STEP 4 : Clean (AVSA specific) ----
+    message("cleaning...\n")
+    
+    tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0,]
+    
+    # attributes(tib_img_vis$ID)
+    # class(tib_img_vis$annotation)
+    
+    tib_img_vis$id <- id
+    tib_img_vis$visit <- visit
+    
+    uncodeable <- 
+      c("uncodeable;0001 camera start time",
+        "uncodeable;0002 camera stop time",
+        "uncodeable;0003 camera taken or turned off",
+        "uncodeable;0004 image dark/blurred/obscured")
+    
+    ind_sit <-
+      which(tib_img_vis$annotation == "posture;0006 sitting")
+    ind_sta <- 
+      which(tib_img_vis$annotation == "posture;0007 standing")
+    ind_mov <- 
+      which(tib_img_vis$annotation == "posture;0008 movement")
+    ind_gap <- 
+      which(tib_img_vis$annotation == "gap")
+    ind_tra <- 
+      which(tib_img_vis$annotation == "transition;0005 less than 3 images")
+    ind_unc <- 
+      which(tib_img_vis$annotation %in% uncodeable)
+    
+    if(length(ind_sit) +
+       length(ind_sta) +
+       length(ind_mov) +
+       length(ind_gap) +
+       length(ind_tra) +
+       length(ind_unc) != 
+       nrow(tib_img_vis)) {
+      
+      stop("CHHHHHHHHHHIIIIIITTT")
+      
+    }
+    
+    tib_img_vis$annotation[ind_sit] <- "0"
+    tib_img_vis$annotation[ind_sta] <- "1"
+    tib_img_vis$annotation[ind_mov] <- "2"
+    tib_img_vis$annotation[ind_gap] <- "3"
+    tib_img_vis$annotation[ind_tra] <- "4"
+    tib_img_vis$annotation[ind_unc] <- "5"
+    
+    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0006 sitting"] <- "0"
+    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0007 standing"] <- "1"
+    # tib_img_vis$annotation[tib_img_vis$annotation == "posture;0008 movement"] <- "2"
+    # tib_img_vis$annotation[tib_img_vis$annotation == "gap"] <- "3"
+    # tib_img_vis$annotation[tib_img_vis$annotation == "transition;0005 less than 3 images"] <- "4"
+    # tib_img_vis$annotation[tib_img_vis$annotation %in% uncodeable] <- "5"
+    
+    tib_img_vis <- 
+      tib_img_vis[, c("id",
+                      "visit",
+                      "time",
+                      "date",
+                      "annotation")]
+    
+    # write table
+    fnm_img_clean <- 
+      paste0(stu_sub_vis,
+             ".csv")
+    vroom_write(
+      tib_img_vis,
+      path = paste(fpa_img_clean,
+                   fnm_img_clean,
+                   sep = "/"),
+      delim = ",",
+      progress = FALSE
+    )
+    
+    cnt_img_processed <- cnt_img_processed + 1
+    
   }
-
-
+  
+  message(
+    "--------------------------------Done Processing--------------------------------\n",
+    "                              ", cnt_img_processed - 1, " files processed.\n"
+  )
+  
+}
 
 
 
@@ -1692,6 +2577,722 @@ if (dim(on_off)[1] == 0) {
                 row.names = F)
   }
 }
+
+
+
+# process_activpal2 -------------------------------------------------------
+
+# fpa_ap_raw <- "./3_data/raw/events"
+# fpa_ap_clean <- "./3_data/processed/ap_clean"
+# log_on_off <- on_off_log
+# id_visits <- "1096V2"
+
+cnt_ap <- 1
+
+fls_ap_raw <- 
+  list.files(
+    path = fpa_ap_raw,
+    pattern = ".csv"
+  )
+
+if (purrr::is_null(id_visits) == FALSE) {
+  
+  if (purrr::is_scalar_character(id_visits)) {
+    
+    ind_fls_raw <- 
+      fls_ap_raw %>% 
+      str_detect(pattern = id_visits) %>% 
+      which()
+    fls_ap_raw <- 
+      fls_ap_raw[ind_fls_raw]
+    
+  } else {
+    
+    # id_visits is not a character or single entry.
+    stop(
+      'Argument "id_visits" is not scalar.\n',
+      'Please make sure id_visits are seperated by "|" with no spaces\n',
+      "in between."
+    )
+    
+  }
+  
+}
+
+# fnm_ap_raw <- fls_ap_raw[1]
+
+# since event file names have mumbo jumbo after first 6 characters
+# chr_ids_visits <- 
+#   str_sub(
+#     fls_ap_raw,
+#     start = 1,
+#     end = 6
+#   )
+
+for (i in seq_along(fls_ap_raw)) {
+  
+  fnm_ap_raw <- fls_ap_raw[i]
+  id_visit <-
+    str_sub(
+      fnm_ap_raw,
+      start = 1,
+      end = 6
+    )
+  id <- 
+    str_sub(
+      fnm_ap_raw,
+      start = 1,
+      end = 4
+    )
+  visit <- 
+    str_sub(
+      fnm_ap_raw,
+      start = 6,
+      end = 6
+    )
+  message(
+    "Processing File #", i, " ", id_visit, ":",
+    appendLF = FALSE
+  )
+  
+  #### CHECK 1: make sure corresponding event file of id in subject log is present
+  # if (id %in% char_ap_ids == FALSE) {
+  #   
+  #   message("\n")
+  #   warning("ID ", id, ":\n",
+  #           "    Event file not found or named incorrectly\n",
+  #           call. = FALSE)
+  #   
+  #   next()
+  #   
+  # }
+  # 
+  # inds_ap_raw <- which(char_ap_ids %in% id)
+  # 
+  # path_ap_raw <- paste0(path_ap_event_files,
+  #                       flst_ap_raw[inds_ap_raw])
+  
+  # STEP 1: Clean Raw AP File ----
+  message(
+    "reading...",
+    appendLF = FALSE
+  )
+  tib_ap_raw <-
+    suppressMessages(
+      vroom(
+        file = paste(
+          fpa_ap_raw,
+          fnm_ap_raw,
+          sep = "/"
+        ),
+        delim = ",",
+        progress = FALSE
+      )
+    )
+  tib_ap_raw <- 
+    tib_ap_raw[, c("Time",                                              
+                   "DataCount (samples)",                             
+                   "Interval (s)",                                  
+                   "ActivityCode (0=sedentary, 1=standing, 2=stepping)",
+                   "CumulativeStepCount",                      
+                   "Activity Score (MET.h)")]
+  colnames(tib_ap_raw) <-
+    c("time",
+      "datacount",
+      "interval",
+      "activity",
+      "cumulativesteps",
+      "methrs")
+  tib_ap_raw$time <- 
+    str_replace(
+      tib_ap_raw$time,
+      pattern = "#",
+      replacement = ""
+    )
+  tib_ap_raw$time <- 
+    str_replace(
+      tib_ap_raw$time,
+      pattern = "#",
+      replacement = ""
+    )
+  # all(
+  #   sub(
+  #     pattern = "#",
+  #     replacement = "",
+  #     tib_ap_raw$time
+  #   ) ==
+  #     str_replace(
+  #       tib_ap_raw$time,
+  #       pattern = "#",
+  #       replacement = ""
+  #     )
+  # )
+  # tib_ap_raw$time <- sub("#", "", tib_ap_raw$time)
+  # tib_ap_raw$time <- sub("#", "", tib_ap_raw$time)
+  
+  # event files have half the actual number of steps for some reason
+  tib_ap_raw$cumulativesteps <- tib_ap_raw$cumulativesteps * 2
+  # all(
+  #   (tib_ap_raw[, "cumulativesteps"] * 2) == (tib_ap_raw[, 5] * 2)
+  # )
+  
+  # make sure event file is not corrupt
+  nrw_ap_raw1 <- nrow(tib_ap_raw)
+  tib_ap_raw  <- tib_ap_raw[!(tib_ap_raw$time == "1899-12-30"), ]
+  tib_ap_raw  <- tib_ap_raw[!(tib_ap_raw$time == "0"), ]
+  nrw_ap_raw2 <- nrow(tib_ap_raw)		
+  
+  # Change from Julian time to UTC
+  if(is.character(tib_ap_raw$time) == TRUE &
+     nrw_ap_raw1 == nrw_ap_raw2) {
+    
+    # convert from Julian date to UTC date time. For some reason, UTC time is
+    # actually relevant time zone.
+    tib_ap_raw$time <- 
+      as.double(tib_ap_raw$time) %>% 
+      lubridate::as_date(origin = "1899-12-30") %>% 
+      lubridate::as_datetime(tz = "UTC") %>% 
+      lubridate::force_tz(tzone = "America/Chicago")      
+    
+    # attributes(tib_ap_raw$time)
+    # Difference with base R is date time is kept as POSIXct instead of
+    # going back and forth to POSIXlt.
+    # tib_ap_raw$time <- as.numeric(tib_ap_raw$time) %>% 
+    # as.Date(origin = "1899-12-30") %>% 
+    #   as.POSIXct() %>% 
+    #   as.POSIXlt(tz = "UTC") %>% 
+    #   force_tz(tzone = "America/Chicago") %>% 
+    #   as.POSIXct()
+    
+  } else {
+    
+    stop("THIS ISNT SUPPPPPPPOSE TO HAPPPPPPEN")
+    
+  }
+  
+  # test2 <- tib_ap_raw[, c(1, 3)]
+  # test2$interval_hms <- seconds_to_period(test2$interval)
+  # test2$is_dst <- dst(tib_ap_raw$time)
+  # which(duplicated(test2$is_dst) == FALSE)
+  # test2 <- test2[5749:5753, -2]
+  # test2$UTCtime <- with_tz(test2$time,
+  #                          tzone = "UTC")
+  # with_tz(test2$time,
+  #         tzone = "UTC")
+  
+  
+  #### CHECK 2: See if ap file is in on_off_log
+  tib_on_off <- 
+    log_on_off[log_on_off$id == id & log_on_off$visit == visit, ]
+  
+  # AP Event file does not automatically adjust for dst.
+  # Therefore, only rely on first entry for both.
+  dtm_file <- tib_ap_raw$time[1]
+  dtm_visit  <- tib_on_off$date_time_on[1]
+  tib_ap_raw$is_dst <- dst(tib_ap_raw$time)
+  lgl_dst <- unique(tib_ap_raw$is_dst)
+  
+  if (nrow(tib_on_off) == 0) {
+    
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    No entry in on_off_log.\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  # AP files after 11/01/2018 have incorrect date due to outdated
+  # PALStudio WHICH. IS. STILL. BEING. USED. However, applying correction
+  # factor will account for dst for an AP that croses from no-yes/yes-no.
+  if (dtm_visit > as.Date("2018-11-01")) {
+    
+    ### CORRECTION FACTOR ###
+    tib_ap_raw$time <- tib_ap_raw$time + 3106.8918*24*60*60
+    
+    # after testing all files were at least 6 sec off
+    tib_ap_raw$time <- tib_ap_raw$time + 6 
+    
+    # daylight savings
+    if (dst(dtm_file) == FALSE &
+        dst(dtm_visit) == TRUE) {
+      
+      # n-y: substract 1 hour because it is ahead
+      tib_ap_raw$time <- tib_ap_raw$time - 60*60 
+      
+    } else if (dst(dtm_file) == TRUE &
+               dst(dtm_visit) == FALSE) {
+      
+      # y-n: add 1 hour because it is behind
+      tib_ap_raw$time <- tib_ap_raw$time + 60*60
+      
+    }
+    
+  } else if (length(lgl_dst) == 2) {
+    
+    # For AP files that switch from y-n or n-yes, must add/remove an hour.
+    ind_dst <- which(duplicated(tib_ap_raw$is_dst) == FALSE)[2]
+    # which(duplicated(tib_ap_raw$is_dst) == FALSE)
+    # which(duplicated(tib_ap_raw$is_dst, fromLast = T) == FALSE)
+    
+    if (lgl_dst[1] == FALSE) {
+      
+      # n-y: add one hour when dst is TRUE
+      tib_ap_raw$time[ind_dst:nrw_ap_raw2] <- 
+        tib_ap_raw$time[ind_dst:nrw_ap_raw2] + 60*60
+      
+    } else if (lgl_dst[1] == TRUE) {
+      
+      # y-n: subtract one hour when dst is FALSE
+      tib_ap_raw$time[ind_dst:nrw_ap_raw2] <- 
+        tib_ap_raw$time[ind_dst:nrw_ap_raw2] - 60*60
+      
+    }
+    
+  }
+  
+  # STEP 2: Second by Second ----
+  message(
+    "sec-by-sec...",
+    appendLF = FALSE
+  )  
+  
+  # OLD
+  # test <- tibble(
+  #   og    = tib_ap_raw$interval,
+  #   diff  = times2,
+  #   og_round = round(
+  #     tib_ap_raw$interval,
+  #     digits = 0
+  #   ),
+  #   diff_round  = round(
+  #     int_event_time,
+  #     digits = 0
+  #   ),
+  #   lgl   = (og_round == diff_round),
+  #   .rows = nrw_ap_raw2
+  # )
+  # test2 <- 
+  #   test[test$lgl == FALSE, ]
+  # og_round <- round(
+  #   tib_ap_raw$interval,
+  #   digits = 0
+  # )
+  # difftime(
+  #   (tib_ap_raw$time[nrw_ap_raw2] + tib_ap_raw$interval[nrw_ap_raw2]),
+  #   tib_ap_raw$time[1],
+  #   units = "secs"
+  # )
+  # sum(tib_ap_raw$interval)
+  # sum(times2)
+  # sum(int_event_time)
+  # sum(og_round)
+  # 
+  # time_each_event <- as.vector(difftime(strptime(raw_ap$time[seq_len(n - 1) + 1],
+  #                                                format="%Y-%m-%d %H:%M:%S"),
+  #                                       strptime(raw_ap$time[seq_len(n - 1)],
+  #                                                format="%Y-%m-%d %H:%M:%S"),
+  #                                       units = "secs"))
+  # time_each_event <- c(time_each_event,
+  #                      round(raw_ap[n,"interval"],
+  #                            0))
+  # time_each_event[is.na(time_each_event) == T] <- 1
+  # all(
+  #   as.vector(
+  #     difftime(
+  #       tib_ap_raw$time[seq_len(nrw_ap_raw2 - 1) + 1],
+  #       tib_ap_raw$time[seq_len(nrw_ap_raw2 - 1)],
+  #       units = "secs"
+  #     )
+  #   ) ==
+  #     diff.POSIXt(
+  #       tib_ap_raw$time,
+  #       lag = 1,
+  #       differences = 1
+  #     )
+  # )
+  # int_event_time <- 
+  #   c(int_event_time,
+  #     tib_ap_raw$interval[nrw_ap_raw2])
+  # int_event_time <- 
+  #   round(
+  #     int_event_time,
+  #     digits = 0
+  #   )
+  # tib_ap_raw <- 
+  #   add_row(
+  #     tib_ap_raw,
+  #     time            = (
+  #       tib_ap_raw$time[nrw_ap_raw2] +
+  #         tib_ap_raw$interval[nrw_ap_raw2]
+  #     ),
+  #     interval        = 0,
+  #     activity        = tib_ap_raw$activity[nrw_ap_raw2],
+  #     cumulativesteps = tib_ap_raw$cumulativesteps[nrw_ap_raw2],
+  #     methrs          = 0
+  #   )
+  # raw_dtm_strpd <-
+  #   strptime(
+  #     raw_dtm,
+  #     format = "%Y-%m-%d %H:%M:%OS"
+  #   ) %>%
+  #   as.POSIXct(tz = "America/Chicago")
+  # int_event_time <- 
+  #   as.vector(
+  #     diff.POSIXt(
+  #       raw_dtm_strpd,
+  #       lag = 1,
+  #       differences = 1
+  #     )
+  #   )
+  # sbs_int_events <- 
+  #   rep(
+  #     seq_along(int_event_time),
+  #     times = int_event_time
+  #   )
+  # sbs_int_acts <- 
+  #   as.integer(
+  #     rep(
+  #       tib_ap_raw$activity,
+  #       times = int_event_time
+  #     )
+  #   )
+  # sbs_dbl_steps <- 
+  #   rep(
+  #     tib_ap_raw$cumulativesteps,
+  #     times = int_event_time
+  #   )
+  # dtm_start <- raw_dtm_strpd[1]
+  # test <- 
+  #   seq.POSIXt(
+  #     dtm_start,
+  #     by = "secs",
+  #     length.out = nrw_ap_sbs
+  #   )
+  # sbs_dtm_times <- dtm_start + (0:(nrw_ap_sbs - 1))
+  # all(
+  #   test == sbs_dtm_times
+  # )
+  # tib_ap_raw$interval <- as.numeric(tib_ap_raw$interval)
+  # tib_ap_raw$methrs <- as.numeric(tib_ap_raw$methrs)
+  # sbs_dbl_methrs <- tib_ap_raw$methrs / tib_ap_raw$interval 	
+  # sbs_dbl_methrs <- rep(sbs_dbl_methrs,
+  #                        times = int_event_time)
+  # sbs_dbl_mets <- tib_ap_raw$methrs * 3600 / tib_ap_raw$interval
+  # sbs_dbl_mets <- rep(sbs_dbl_mets,
+  #                      times = int_event_time)
+  
+  # Create dtm vector where last entry is time[nrow] + interval[nrow] for diff
+  # function. Do it this way as previous method of adding in the rounded
+  # interval[nrow] to stripped time does not take into account fractional
+  # seconds.
+  raw_dtm <- 
+    c(tib_ap_raw$time,
+      tib_ap_raw$time[nrw_ap_raw2] + tib_ap_raw$interval[nrw_ap_raw2])
+  
+  # To make sec-by-sec, take the difference between each time and the previous
+  # time. Do this with the "strptimed" date-time's as this will account for 
+  # added fractional seconds. Not doing so will result in a sbs file less 
+  # than 2 hours for visits. This will also make time entries exactly equal to
+  # on and off times.
+  # seconds(tib_ap_raw$time[1])
+  raw_dtm_strpd <-
+    raw_dtm %>% 
+    strptime(format = "%Y-%m-%d %H:%M:%OS") %>%
+    as.POSIXct(tz = "America/Chicago")
+  int_event_time <- 
+    raw_dtm_strpd %>% 
+    diff.POSIXt(
+      lag = 1,
+      differences = 1
+    ) %>% 
+    as.vector()
+  int_event_time[is.na(int_event_time)] <- 1
+  int_event_time <- as.integer(int_event_time)
+  
+  # make sbs variables:
+  sbs_int_events <- 
+    int_event_time %>% 
+    seq_along() %>% 
+    rep(times = int_event_time)
+  sbs_int_acts <- 
+    tib_ap_raw$activity %>% 
+    rep(times = int_event_time) %>% 
+    as.integer()
+  sbs_dbl_steps <-
+    tib_ap_raw$cumulativesteps %>% 
+    rep(times = int_event_time) %>% 
+    as.double()
+  nrw_ap_sbs <- length(sbs_int_events)
+  sbs_dtm_times <- 
+    seq.POSIXt(
+      from = raw_dtm_strpd[1],
+      by = "secs",
+      length.out = nrw_ap_sbs
+    )
+  sbs_dte_dates <- date(sbs_dtm_times)
+  
+  # The met hours per second in the interval.
+  sbs_dbl_methrs <- 
+    (tib_ap_raw$methrs / tib_ap_raw$interval) %>% 
+    rep(times = int_event_time)
+  
+  # To compute mets per second in the interval, multiply methours by 3600 sec/hour
+  # and divide by number of seconds.
+  sbs_dbl_mets <- 
+    (tib_ap_raw$methrs * 3600 / tib_ap_raw$interval) %>% 
+    rep(times = int_event_time)
+  
+  # ap_sbs
+  tib_ap_sbs <- 
+    tibble(
+      time       = sbs_dtm_times,
+      date       = sbs_dte_dates,
+      ap_posture = sbs_int_acts,
+      mets       = sbs_dbl_mets,
+      met_hours  = sbs_dbl_methrs,
+      steps      = sbs_dbl_steps,
+      num_events = sbs_int_events,
+      .rows      = nrw_ap_sbs
+    )
+  tib_ap_sbs$mets <- 
+    signif(
+      tib_ap_sbs$mets,
+      digits = 3
+    )
+  
+  #	STEP 3: Label on off times ----
+  message(
+    "off-times...",
+    appendLF = FALSE
+  )
+  tib_ap_sbs$off <- 1
+  nrw_on_off <- nrow(tib_on_off)
+  dbl_sec_applied <- vector(mode = "double",
+                            length = nrw_on_off)
+  
+  #	If on/off times recorded - loop through and label time monitor is not worn.
+  for (i in seq_len(nrw_on_off)) {
+    
+    dtm_on  <- tib_on_off$date_time_on[i]
+    dtm_off <- tib_on_off$date_time_off[i]
+    
+    # Can use integer subsetting as time should never have an NA at this point.
+    ind_on <- 
+      tib_ap_sbs$time %>% 
+      dplyr::between(
+        left = dtm_on,
+        right = dtm_off
+      ) %>% 
+      which()
+    # test <- 
+    #   which(
+    #     (tib_ap_sbs$time >= dtm_on) &
+    #       (tib_ap_sbs$time <= dtm_off)
+    #   )
+    # test2 <- 
+    #   ind_on <- 
+    #   tib_ap_sbs$time %>% 
+    #   between(
+    #     left = dtm_on,
+    #     right = dtm_off
+    #   ) %>% 
+    #   which()
+    # all(
+    #   test == test2
+    # )
+    
+    # Tells us if the on interval was actually applied to AP (IMG) file. Substract
+    # one because it includes on time.
+    dbl_sec_applied[i] <- length(ind_on) - 1
+    
+    if (length(ind_on) > 0) {
+      
+      tib_ap_sbs$off[ind_on] <- 0
+      
+      # If on interval goes past midnight, make all the dates the first date
+      # of the on interval.
+      tib_ap_sbs$date[ind_on] <- tib_ap_sbs$date[ind_on][1]
+      
+    }
+  }
+  
+  #### CHECK 3: see if off times were actually labeled.
+  dbl_sec_on <- tib_on_off$seconds_on
+  
+  # In the event an on interval overlapped another on interval (take out extra
+  # "zero" seconds).
+  int_sec_worn <- sum(tib_ap_sbs$off == 0) - nrw_on_off
+  int_sec_applied_all <- as.integer(sum(dbl_sec_applied))
+  
+  if (int_sec_applied_all <= 0 ||
+      int_sec_worn <= 0) {
+    
+    # none of the AP (IMG) file has any of the log entries.
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    Event file and on_off_log entries do not match at all.\n",
+            "    AP likely not worn at all or corrupt.\n",
+            call. = FALSE)
+    
+    next() 
+    
+  }  else if (all(dbl_sec_on == dbl_sec_applied) == FALSE) {
+    
+    # AP (IMG) partially has on off entry and does not have the rest after.
+    message("\n")
+    ind_mis_part <- 
+      which(
+        dbl_sec_on != dbl_sec_applied &
+          dbl_sec_applied != -1
+      )
+    ind_mis_full <- 
+      which(
+        dbl_sec_on != dbl_sec_applied &
+          dbl_sec_applied == -1
+      )
+    chr_entries_log <- 
+      apply(
+        log_on_off[, 1:4],
+        MARGIN = 1,
+        FUN = paste,
+        collapse = " "
+      )
+    chr_entries_visit <- 
+      apply(
+        tib_on_off[, 1:4],
+        MARGIN = 1,
+        FUN = paste,
+        collapse = " "
+      )
+    ind_log_part <- 
+      which(
+        chr_entries_log %in%
+          chr_entries_visit[ind_mis_part]
+      )
+    ind_log_full <- 
+      which(
+        chr_entries_log %in%
+          chr_entries_visit[ind_mis_full]
+      )
+    chr_mis_time_part <- 
+      paste(
+        format.POSIXct(
+          log_on_off$date_time_on[ind_log_part],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        format.POSIXct(
+          log_on_off$date_time_off[ind_log_part],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        sep = " - "
+      )
+    
+    chr_mis_time_full <- 
+      paste(
+        format.POSIXct(
+          log_on_off$date_time_on[ind_log_full],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        format.POSIXct(
+          log_on_off$date_time_off[ind_log_full],
+          format = "%m/%d/%Y %H:%M:%S"
+        ),
+        sep = " - "
+      )
+    
+    for (i in seq_along(ind_log_part)) {
+      
+      mis_num    <- ind_log_part[i]
+      mis_on_off <- chr_mis_time_part[i]
+      
+      warning("AP File ", id_visit, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval partially found in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    for (i in seq_along(ind_log_full)) {
+      
+      mis_num    <- ind_log_full[i]
+      mis_on_off <- chr_mis_time_full[i]
+      
+      warning("AP File ", id_visit, ":\n",
+              "    On off entry #", mis_num + 1, ", ", mis_on_off, ".\n",
+              "    Interval not found at all in Event File.\n",
+              "    Fix entry or remove file.\n",
+              call. = FALSE)
+      
+    }
+    
+    next()
+    
+  } else if (int_sec_worn != int_sec_applied_all) {
+    
+    # on intervals are in AP (IMG) but one on interval overlaps another interval.
+    message("\n")
+    warning("AP File ", id_visit, ":\n",
+            "    Event file and on_off_log entries partially match.\n",
+            "    One or more log entries overlap each other.\n",
+            "    Check on_off entries.\n",
+            call. = FALSE)
+    
+    next()
+    
+  }
+  
+  # STEP 4 : Clean (AVSA Specific) ----
+  message(
+    "cleaning...\n",
+    appendLF = TRUE
+  )
+  
+  # make file with off time cleaned out. REMEMBER! This still includes
+  # the "zero" seconds of each on interval as it is still needed.
+  tib_ap_vis <- tib_ap_sbs[tib_ap_sbs$off == 0, ]
+  tib_ap_vis$id <- id
+  tib_ap_vis$visit <- visit
+  tib_ap_vis <- 
+    tib_ap_vis[ , c("id",
+                    "visit",
+                    "time",
+                    "ap_posture")]
+  
+  # write data frame
+  fnm_ap_clean <- 
+    paste(
+      "FLAC",
+      id_visit,
+      sep = "_"
+    ) %>% 
+    paste0(".csv")
+  vroom::vroom_write(
+    tib_ap_vis,
+    path = paste(
+      fpa_ap_clean,
+      fnm_ap_clean,
+      sep = "/"
+    ),
+    delim = ",",
+    # bom = TRUE,
+    progress = FALSE
+  )
+  
+  cnt_ap <- cnt_ap + 1
+  
+}
+
+message(
+  "--------------------------------Done Processing--------------------------------\n",
+  "                              ", cnt_ap - 1, " files processed.\n",
+  "\n",
+  "File times are in UTC.\n",
+  appendLF = TRUE
+)
+
 
 
 # testing daylight conversion -----------------------------------------------------
@@ -3645,6 +5246,279 @@ if (counter > 1) {
 }
   
 
+# process_avsa_data_OLD ---------------------------------------------------
+# OLD
+# tib_gapless <- tib_og[tib_og$annotation != 3, ] # gaps = 3
+# # fixpoint#1: if a file does not have a posture
+# tib_gapless$annotation <- as.factor(tib_gapless$annotation)
+# tib_gapless$ap_posture <- as.factor((tib_gapless$ap_posture))
+# 
+# anno_levels <- levels(tib_gapless$annotation)
+# ap_levels <- levels(tib_gapless$ap_posture)
+# 
+# if (length(anno_levels) < 4 || length(ap_levels) < 4) {
+#   
+#   event_levels <- union(anno_levels, ap_levels) %>% 
+#     as.integer() %>% 
+#     sort() %>% 
+#     paste()
+#   
+#   # if event_levels has all postures
+#   if (all(c("0", "1", "2", "4") %in% event_levels)) {
+#     
+#     tib_gapless$annotation <- factor(tib_gapless$annotation,
+#                                       levels = event_levels)
+#     tib_gapless$ap_posture<- factor(tib_gapless$ap_posture,
+#                                      levels = event_levels)
+#     
+#     # if there is no sitting in both anno and ap
+#   } else if (all(c("1", "2", "4") %in% event_levels)) {
+#     
+#     event_levels[length(event_levels) + 1] <- "0"
+#     event_levels <- as.integer(event_levels) %>% 
+#       sort() %>% 
+#       paste()
+#     
+#     tib_gapless$annotation <- factor(tib_gapless$annotation,
+#                                       levels = event_levels)
+#     tib_gapless$ap_posture<- factor(tib_gapless$ap_posture,
+#                                      levels = event_levels)
+#     
+#   } 
+# }    
+# 
+# # fixpoint for event
+# tib_event$annotation <- as.factor(tib_event$annotation)
+# tib_event$ap_posture <- as.factor((tib_event$ap_posture))
+# 
+# anno_levels <- levels(tib_event$annotation)
+# ap_levels <- levels(tib_event$ap_posture)
+# 
+# if (length(anno_levels) < 3 || length(ap_levels) < 3) {
+#   
+#   event_levels <- union(anno_levels, ap_levels) %>% 
+#     as.integer() %>% 
+#     sort() %>% 
+#     paste()
+#   
+#   # if event_levels has all postures
+#   if (all(c("0", "1", "2") %in% event_levels)) {
+#     
+#     tib_event$annotation <- factor(tib_event$annotation,
+#                                     levels = event_levels)
+#     tib_event$ap_posture<- factor(tib_event$ap_posture,
+#                                    levels = event_levels)
+#     
+#     # if there is no sitting in both anno and ap
+#   } else if (all(c("1", "2") %in% event_levels)) {
+#     
+#     event_levels[length(event_levels) + 1] <- "0"
+#     event_levels <- as.integer(event_levels) %>% 
+#       sort() %>% 
+#       paste()
+#     
+#     tib_event$annotation <- factor(tib_event$annotation,
+#                                     levels = event_levels)
+#     tib_event$ap_posture<- factor(tib_event$ap_posture,
+#                                    levels = event_levels)
+#     
+#   } 
+# }    
+# TIMES: visit, event, transition (all converted to minutes)
+# time_visit <- (nrow(tib_og) %>%
+#                  as.integer())/60
+# 
+# time_event <- (tib_event %>%
+#                  nrow(.) %>% 
+#                  as.integer())/60
+# 
+# time_trans <- 
+#   (tib_og[tib_og$annotation == 4, ] %>%
+#      nrow(.) %>% 
+#      as.integer())/60
+# 
+# time_gap <- (tib_og[tib_og$annotation == 3, ] %>%
+#                nrow(.) %>% 
+#                as.integer())/60
+# # TIMES: event ap time (for bias), rows = ap
+# time_matr_event <- (table(tib_event$ap_posture,
+#                           tib_event$annotation) %>% 
+#                       addmargins())
+# time_matr_event
+# 
+# time_ap_sit <- time_matr_event[1, 4] # posture times
+# time_ap_sta <- time_matr_event[2, 4]
+# time_ap_mov <- time_matr_event[3, 4]
+# # check to see event and transition equal tib_og. dont include in function
+# all.equal(time_event + time_gap + time_trans,
+#           nrow(tib_og)/60)
+# 
+# TIMES: anno times and (miss)classifications, anno times are same within event and gapless
+# time_matr_gapless <- (table(tib_gapless$ap_posture,
+#                             tib_gapless$annotation) %>% 
+#                         addmargins())
+# time_matr_gapless
+# 
+# time_anno_sit <- time_matr_gapless[5, 1]
+# time_anno_sta <- time_matr_gapless[5, 2]
+# time_anno_mov <- time_matr_gapless[5, 3]
+# 
+# time_agre_ss <- time_matr_gapless[1, 1] # last two letters: first is ap, second is anno, d = stand, t = trans
+# time_miss_sd <- time_matr_gapless[1, 2] # "anno misclassified ap sitting as standing"
+# time_miss_sm <- time_matr_gapless[1, 3] # "anno misclassified ap sitting as movement"
+# 
+# time_miss_ds <- time_matr_gapless[2, 1]
+# time_agre_dd <- time_matr_gapless[2, 2] # "anno agrees with ap standing"
+# time_miss_dm <- time_matr_gapless[2, 3]
+# 
+# time_miss_ms <- time_matr_gapless[3, 1]
+# time_miss_md <- time_matr_gapless[3, 2]
+# time_agre_mm <- time_matr_gapless[3, 3]
+# 
+# time_miss_st <- time_matr_gapless[1, 4] # "transition time when there is ap sitting"
+# time_miss_dt <- time_matr_gapless[2, 4]
+# time_miss_mt <- time_matr_gapless[3, 4]
+# 
+# # TIMES: total ap time and total agree time
+# tot_time_ap_sit <- time_matr_gapless[1, 5]
+# tot_time_ap_sta <- time_matr_gapless[2, 5]
+# tot_time_ap_mov <- time_matr_gapless[3, 5]
+# 
+# time_agre_total <- time_agre_ss + time_agre_dd + time_agre_mm 
+# 
+# # check
+# sum(tib_og$annotation == tib_og$ap_posture)/60 # TRUE = agree, adds all sec they agree
+# all.equal(time_agre_total,
+#           sum(tib_og$annotation == tib_og$ap_posture)/60)
+# table_analysis_time <- 
+#   data.frame(
+#     ID             = id,
+#     Visit          = visit,
+#     visit_time     = time_visit,
+#     event_time     = time_event,
+#     gap_time       = time_gap,
+#     trans_time     = time_trans,
+#     total_agree    = time_agre_total,
+#     event_agree    = time_agre_total,
+#     sit_ap         = time_ap_sit,
+#     sit_anno       = time_anno_sit,
+#     stand_ap       = time_ap_sta,
+#     stand_anno     = time_anno_sta,
+#     move_ap        = time_ap_mov,
+#     move_anno      = time_anno_mov,
+#     total_sit_ap   = tot_time_ap_sit,
+#     total_stand_ap = tot_time_ap_sta,
+#     total_move_ap  = tot_time_ap_mov,
+#     sit_agree      = time_agre_ss,
+#     stand_agree    = time_agre_dd,
+#     move_agree     = time_agre_mm,
+#     sit_trans      = time_miss_st,
+#     stand_trans    = time_miss_dt,
+#     move_trans     = time_miss_mt,
+#     sit_mis_stand  = time_miss_sd,
+#     sit_mis_move   = time_miss_sm,
+#     stand_mis_sit  = time_miss_ds,
+#     stand_mis_move = time_miss_dm,
+#     move_mis_sit   = time_miss_ms,
+#     move_mis_stand = time_miss_md
+#   )
+# # PERCENTAGES: event, transition, total agreement and event agreement
+# perc_event <- time_event/time_visit*100 #
+# perc_trans <- time_trans/time_visit*100
+# perc_gap   <- time_gap/time_visit*100
+# perc_agre_total <-  time_agre_total/time_visit*100 #
+# perc_agre_event <-  time_agre_total/time_event*100 #
+# 
+# # PERCENTAGES: ap and anno of event time
+# perc_matr_event <- (time_matr_event/time_matr_event[, 4])*100 # dividing by ap posture times
+# perc_matr_event
+# 
+# perc_ap_sit <- time_ap_sit/time_event*100 # posture percentages of event time
+# perc_ap_sta <- time_ap_sta/time_event*100
+# perc_ap_mov <- time_ap_mov/time_event*100
+# perc_ap_sit + perc_ap_sta + perc_ap_mov == 100
+# 
+# perc_anno_sit <- time_anno_sit/time_event*100
+# perc_anno_sta <- time_anno_sta/time_event*100
+# perc_anno_mov <- time_anno_mov/time_event*100
+# all.equal(perc_anno_sit + perc_anno_sta + perc_anno_mov,
+#           100)
+# 
+# # PERCENTAGES: (miss)classifications relative to total ap time
+# perc_matr_gapless <- (time_matr_gapless/time_matr_gapless[, 5])*100
+# 
+# perc_agre_ss <- perc_matr_gapless[1, 1] # last two letters: firs is ap, second is anno, d = stand, t = trans
+# perc_miss_sd <- perc_matr_gapless[1, 2] # "anno misclassified ap sitting as standing ##% of ap sit time"
+# perc_miss_sm <- perc_matr_gapless[1, 3] # "anno misclassified ap sitting as movement ##% of ap sit time"
+# 
+# perc_miss_ds <- perc_matr_gapless[2, 1]
+# perc_agre_dd <- perc_matr_gapless[2, 2] # "anno agrees with ap standing ##% of ap standing time"
+# perc_miss_dm <- perc_matr_gapless[2, 3]
+# 
+# perc_miss_ms <- perc_matr_gapless[3, 1]
+# perc_miss_md <- perc_matr_gapless[3, 2]
+# perc_agre_mm <- perc_matr_gapless[3, 3]
+# 
+# perc_miss_st <- perc_matr_gapless[1, 4] # "##% of TOTAL (non-event) ap sit time classified as transition"
+# perc_miss_dt <- perc_matr_gapless[2, 4]
+# perc_miss_mt <- perc_matr_gapless[3, 4]
+# 
+# # PERCENTAGES: total ap time relative to visit time
+# tot_perc_ap_sit <- tot_time_ap_sit/time_visit*100 # posture percentages of event time
+# tot_perc_ap_sta <- tot_time_ap_sta/time_visit*100
+# tot_perc_ap_mov <- tot_time_ap_mov/time_visit*100
+# tot_perc_ap_mov + tot_perc_ap_sit + tot_perc_ap_sta + perc_gap
+# table_analysis_percentage <- 
+#   data.frame(
+#     ID             = id,
+#     Visit          = visit,
+#     event_time     = perc_event,
+#     gap_time       = perc_gap,
+#     trans_time     = perc_trans,
+#     total_agree    = perc_agre_total,
+#     event_agree    = perc_agre_event,
+#     sit_ap         = perc_ap_sit,
+#     sit_anno       = perc_anno_sit,
+#     stand_ap       = perc_ap_sta,
+#     stand_anno     = perc_anno_sta,
+#     move_ap        = perc_ap_mov,
+#     move_anno      = perc_anno_mov,
+#     total_sit_ap   = tot_perc_ap_sit,
+#     total_stand_ap = tot_perc_ap_sta,
+#     total_move_ap  = tot_perc_ap_mov,
+#     sit_agree      = perc_agre_ss,
+#     stand_agree    = perc_agre_dd,
+#     move_agree     = perc_agre_mm,
+#     sit_trans      = perc_miss_st,
+#     stand_trans    = perc_miss_dt,
+#     move_trans     = perc_miss_mt,
+#     sit_mis_stand  = perc_miss_sd,
+#     sit_mis_move   = perc_miss_sm,
+#     stand_mis_sit  = perc_miss_ds,
+#     stand_mis_move = perc_miss_dm,
+#     move_mis_sit   = perc_miss_ms,
+#     move_mis_stand = perc_miss_md
+#   )
+# vroom_write(table_analysis_time,
+#             path = "./3_data/analysis/table_analysis_time.csv",
+#             delim = ",",
+#             append = F)
+# 
+# vroom_write(table_analysis_percentage,
+#             path = "./3_data/analysis/table_analysis_percentage.csv",
+#             delim = ",",
+#             append = F)
+# vroom_write(table_analysis_time,
+#             path = "./3_data/analysis/table_analysis_time.csv",
+#             delim = ",",
+#             append = T)
+# 
+# vroom_write(table_analysis_percentage,
+#             path = "./3_data/analysis/table_analysis_percentage.csv",
+#             delim = ",",
+#             append = T)
+
+
 
 # analysis_sedentary ------------------------------------------------------
 
@@ -4147,6 +6021,739 @@ tbl_miss_time
 tbl_miss_perc
 
 
+
+# create_miss_graphic OLD -------------------------------------------------
+
+{
+
+  # read in only classifications
+  graph <- tbl_miss_perc[ , -which(colnames(tbl_miss_perc) %in% c("AP_Total"))]
+
+  # rename IMG to correct
+  colnames(graph)[2] <- "Correct"
+
+  # change table into variables that represent x, y, other
+  graph <- graph %>%
+    melt(id.vars = "Posture")
+
+  # clean
+  colnames(graph)[2] <- "Classification"
+
+  graph <- graph[graph$value != 0, ]
+
+  graph$Posture <- factor(graph$Posture,
+                          levels = c("Sit",
+                                     "Stand",
+                                     "Move"))
+
+  # label
+  lbl <- tbl_miss_perc
+  lbl$label <- lbl$AP_Total/lbl$AP_Total*100
+
+  # color
+  brewer.pal(9, name = "PuBuGn")
+  brewer.pal(5, name = "Greys")
+  brewer.pal(5, name = "Set3")
+  brewer.pal(5, name = "Spectral")
+  # old color layout
+  c("#3399FF",
+    "#FF6666",
+    "#9999FF",
+    "#FF9933",
+    "#99CC99")
+
+  graph_colors <- brewer.pal(9, name = "PuBuGn")[c(1, 9, 5, 7, 3)]
+  graph_colors <- brewer.pal(9, name = "PuBuGn")[c(1, 3, 5, 7, 9)]
+
+
+  # need to calculate actual position of labels
+  graph_pos <- graph[order(graph$Posture, graph$Classification, decreasing = TRUE), ]
+
+  graph_pos <- group_by(graph_pos,Posture) %>%
+    mutate(pos = cumsum(value) - (0.5 * value))
+
+  # plot - B&W ----
+
+  ggplot(data = graph) +
+    geom_bar_pattern(
+      mapping = aes(x = Posture,
+                    y = value,
+                    pattern = Classification,
+                    pattern_alpha = Classification,
+                    pattern_shape = Classification,
+                    pattern_angle = Classification,
+                    pattern_density = Classification
+      ),
+      color = "black",
+      fill = "white",
+      size = 1,
+      stat = "identity",
+      pattern_fill = "black",
+      pattern_color = "black",
+      pattern_spacing = 0.01
+    ) +
+    scale_pattern_manual(
+      values = c("stripe",
+                 "crosshatch",
+                 "circle",
+                 "stripe",
+                 "stripe")
+      # values = c("stripe",
+      #            "crosshatch",
+      #            "circle",
+      #            "stripe",
+      #            "stripe")
+    ) +
+    scale_pattern_angle_manual(
+      values = c(0,
+                 45,
+                 45,
+                 0,
+                 90)
+    ) +
+    scale_pattern_alpha_manual(
+      values = c(0, 1, 1, 1, 1)
+    ) +
+    scale_pattern_density_manual(
+      values = c(0.2,
+                 1.0,
+                 0.2,
+                 0.2,
+                 0.2)
+    ) +
+    geom_text(
+      data = lbl,
+      mapping = aes(x = Posture,
+                    y = label,
+                    label = paste(AP_Total, "mins")),
+      # fontface = "bold",
+      vjust = -0.5
+    ) +
+    geom_label(
+      data = graph_pos[!(graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct"), ],
+      mapping = aes(x = Posture,
+                    y = pos,
+                    label = paste0(value, "%")),
+      fill = "white",
+      label.size = 1,
+      show.legend = FALSE
+    ) +
+    geom_label_repel(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(x = Posture,
+                    y = pos,
+                    label = paste0(value, "%")),
+      fill = "white",
+      box.padding = 0.25, # def = 0.25
+      label.padding = 0.4, # def = 0.25
+      point.padding = 0, # def
+      label.r = 0.15, # def = 0.15
+      label.size = 1, # def = 0.5
+      segment.color = "black", # def
+      segment.size = 2.0, # def = 0.5
+      segment.alpha = 1.0, # def
+      # arrow = arrow(angle = 30,
+      #               length = unit(0.03,
+      #                             "npc"),
+      #               type = "closed",
+      #               ends = "first"),
+      force = 1,
+      max.iter = 2000,
+      # nudge_x = 0,
+      # nudge_y = 0,
+      xlim = c(0.6, 1.4),
+      ylim = c(16, NA),
+      show.legend = FALSE,
+      direction = "x"
+    ) +
+    geom_point(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(x = Posture,
+                    y = pos),
+      size = 3,
+      shape = 21,
+      fill = "white",
+      color = "black",
+      show.legend = FALSE
+    ) +
+    scale_y_continuous(
+      name = "% of Total activPAL Estimates",
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(mult = c(0.05, .05)) # for cont, mult 5% = default
+    ) +
+    scale_x_discrete(
+      name = waiver(),
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(add = c(0.54, 0.54)) # for disc, add 0.6 units = default
+    ) +
+    labs(
+      title = "Proportion of Total activPAL estimates classified by Images",
+      x = "Posture",
+      y = "% of Total activPAL Estimates"
+    ) +
+    # scale_fill_manual(
+    #   values = c("white",
+    #              "white",
+    #              "white",
+    #              "white",
+    #              "white")
+    # ) +
+    theme(
+      line = element_line(
+        color = "black", # def = black
+        size = 1, # def = 0.5
+        linetype = NULL, # def = solid
+        lineend = NULL, # def = square
+        arrow = NULL, # def = none
+        inherit.blank = FALSE
+      ),
+      rect = element_rect(
+        fill = NULL, # def varies
+        color = NULL, # ???
+        size = NULL, # border size
+        linetype = NULL,
+        inherit.blank = FALSE
+      ),
+      text = element_text(
+        family = NULL,
+        face = NULL,
+        color = "black",
+        size = 15,
+        hjust = NULL,
+        vjust = NULL,
+        angle = NULL,
+        lineheight = NULL,
+        margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+        debug = FALSE,
+        inherit.blank = FALSE
+      ),
+      title = element_text(
+        face = "bold",
+        debug = TRUE
+      ),
+      plot.title = element_text(face = "bold",
+                                hjust = 0.5),
+      # axis.title.x.bottom = element_text(hjust = 0.50),
+
+      axis.ticks.length.y.left = unit(-.5, units = "cm"), # -.8 w/ .6
+      axis.ticks.length.x.bottom = unit(0, units = "cm"),
+
+      axis.ticks.y.left = element_line(color = "black"),
+
+      axis.text.y.left = element_text(color = "black",
+                                      margin = margin(r = 0.6, unit = "cm")),
+      axis.text.x.bottom = element_text(color = "black",
+                                        margin = margin(t = -0.45, unit = "cm")),
+
+
+      panel.background = element_rect(fill = "White", # def = "grey92"
+                                      color = NA)
+      # panel.grid.major.y = element_line(color = "black",
+      #                                   size = 1, # 0.5 = default
+      #                                   linetype = "solid",
+      #                                   lineend = "square",
+      #                                   arrow = NULL,
+      #                                   inherit.blank = FALSE),
+    )
+
+
+
+
+  # plot - color w/ white labels ----
+
+  ggplot(data = graph) +
+    geom_bar(
+      mapping = aes(x = Posture,
+                    y = value,
+                    fill = Classification),
+      color = "black",
+      size = 1,
+      stat = "identity"
+    ) +
+    geom_text(
+      data = lbl,
+      mapping = aes(x = Posture,
+                    y = label,
+                    label = paste(AP_Total, "mins")),
+      vjust = -0.5
+    ) +
+    geom_label(
+      data = graph_pos[!(graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct"), ],
+      mapping = aes(x = Posture,
+                    y = pos,
+                    # fill = Classification,
+                    label = paste0(value, "%")),
+      # position = position_stack(vjust = 0.5),
+
+      label.size = 1,
+      show.legend = FALSE
+    ) +
+    geom_label_repel(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(x = Posture,
+                    y = pos, # value if you want color in label
+                    # fill = Classification,
+                    label = paste0(value, "%")),
+      # position = position_stack(vjust = 0.5),
+      box.padding = 0.25, # def = 0.25
+      label.padding = 0.4, # def = 0.25
+      point.padding = 0, # def
+      label.r = 0.15, # def = 0.15
+      label.size = 1, # def = 0.5
+      segment.color = "black", # def
+      segment.size = 2.0, # def = 0.5
+      segment.alpha = 1.0, # def
+      # arrow = arrow(angle = 30,
+      #               length = unit(0.03,
+      #                             "npc"),
+      #               type = "closed",
+      #               ends = "first"),
+      force = 1,
+      max.iter = 2000,
+      # nudge_x = 0,
+      # nudge_y = 0,
+      xlim = c(0.6, 1.4),
+      ylim = c(16, NA),
+      show.legend = FALSE,
+      direction = "x"
+    ) +
+    geom_point(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(
+        x = Posture,
+        y = pos #value if you want color in label
+        # fill = Classification
+      ),
+      # position = position_stack(vjust = 0.5),
+      size = 3,
+      shape = 21,
+      fill = "white",
+      color = "black",
+      show.legend = FALSE
+    ) +
+    scale_y_continuous(
+      name = "% of Total activPAL Estimates",
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(mult = c(0.05, 0.05)) # for cont, mult 5% = default
+    ) +
+    scale_x_discrete(
+      name = waiver(),
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(add = c(0.54, 0.54)) # for disc, add 0.6 units = default
+    ) +
+    labs(
+      title = "Proportion of Total activPAL estimates classified by Images",
+      x = "Posture",
+      y = "% of Total activPAL Estimates"
+    ) +
+    theme(
+      line = element_line(
+        color = "black", # def = black
+        size = 1, # def = 0.5
+        linetype = NULL, # def = solid
+        lineend = NULL, # def = square
+        arrow = NULL, # def = none
+        inherit.blank = FALSE
+      ),
+      rect = element_rect(
+        fill = NULL, # def varies
+        color = NULL, # ???
+        size = NULL, # border size
+        linetype = NULL,
+        inherit.blank = FALSE
+      ),
+      text = element_text(
+        family = NULL,
+        face = NULL,
+        color = "black",
+        size = 15,
+        hjust = NULL,
+        vjust = NULL,
+        angle = NULL,
+        lineheight = NULL,
+        margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+        debug = FALSE,
+        inherit.blank = FALSE
+      ),
+      title = element_text(
+        face = "bold",
+        debug = TRUE
+      ),
+      plot.title = element_text(face = "bold",
+                                hjust = 0.5),
+
+      axis.ticks.length.y.left = unit(-.5, units = "cm"), # -.8 w/ .6
+      axis.ticks.length.x.bottom = unit(0, units = "cm"),
+
+      axis.ticks.y.left = element_line(color = "black"),
+
+      axis.text.y.left = element_text(color = "black",
+                                      margin = margin(r = 0.6, unit = "cm")),
+      axis.text.x.bottom = element_text(color = "black",
+                                        margin = margin(t = -0.45, unit = "cm")),
+
+
+      panel.background = element_rect(fill = "White", # def = "grey92"
+                                      color = NA)
+    ) +
+    # scale_fill_brewer(
+    #   palette = "Spectral",
+    #   direction = -1
+    # )
+    scale_fill_manual(
+      values = graph_colors
+    )
+
+
+  # plot - color w/ colored labels ----
+
+  ggplot(data = graph) +
+    geom_bar(
+      mapping = aes(x = Posture,
+                    y = value,
+                    fill = Classification),
+      color = "black",
+      size = 1,
+      stat = "identity"
+    ) +
+    geom_text(
+      data = lbl,
+      mapping = aes(x = Posture,
+                    y = label,
+                    label = paste(AP_Total, "mins")),
+      vjust = -0.5
+    ) +
+    geom_label(
+      data = graph_pos[!(graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct"), ],
+      mapping = aes(x = Posture,
+                    y = value,
+                    fill = Classification,
+                    label = paste0(value, "%")),
+      position = position_stack(vjust = 0.5),
+      label.size = 1,
+      show.legend = FALSE
+    ) +
+    geom_label_repel(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(x = Posture,
+                    y = value, # value if you want color in label
+                    fill = Classification,
+                    label = paste0(value, "%")),
+      position = position_stack(vjust = 0.5),
+      box.padding = 0.25, # def = 0.25
+      label.padding = 0.4, # def = 0.25
+      point.padding = 0, # def
+      label.r = 0.15, # def = 0.15
+      label.size = 1, # def = 0.5
+      segment.color = "black", # def
+      segment.size = 2.0, # def = 0.5
+      segment.alpha = 1.0, # def
+      # arrow = arrow(angle = 30,
+      #               length = unit(0.03,
+      #                             "npc"),
+      #               type = "closed",
+      #               ends = "first"),
+      force = 1,
+      max.iter = 2000,
+      # nudge_x = 0,
+      # nudge_y = 0,
+      xlim = c(0.6, 1.4),
+      ylim = c(16, NA),
+      show.legend = FALSE,
+      direction = "x"
+    ) +
+    geom_point(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(
+        x = Posture,
+        y = value, #value if you want color in label
+        fill = Classification
+      ),
+      position = position_stack(vjust = 0.5),
+      show.legend = FALSE
+    ) +
+    scale_y_continuous(
+      name = "% of Total activPAL Estimates",
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(mult = c(0.05, 0.05)) # for cont, mult 5% = default
+    ) +
+    scale_x_discrete(
+      name = waiver(),
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(add = c(0.54, 0.54)) # for disc, add 0.6 units = default
+    ) +
+    labs(
+      title = "Proportion of Total activPAL estimates classified by Images",
+      x = "Posture",
+      y = "% of Total activPAL Estimates"
+    ) +
+    scale_fill_manual(
+      values = graph_colors
+    ) +
+    theme(
+      line = element_line(
+        color = "black", # def = black
+        size = 1, # def = 0.5
+        linetype = NULL, # def = solid
+        lineend = NULL, # def = square
+        arrow = NULL, # def = none
+        inherit.blank = FALSE
+      ),
+      rect = element_rect(
+        fill = NULL, # def varies
+        color = NULL, # ???
+        size = NULL, # border size
+        linetype = NULL,
+        inherit.blank = FALSE
+      ),
+      text = element_text(
+        family = NULL,
+        face = NULL,
+        color = "black",
+        size = 15,
+        hjust = NULL,
+        vjust = NULL,
+        angle = NULL,
+        lineheight = NULL,
+        margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+        debug = FALSE,
+        inherit.blank = FALSE
+      ),
+      title = element_text(
+        face = "bold",
+        debug = TRUE
+      ),
+      plot.title = element_text(face = "bold",
+                                hjust = 0.5),
+      # axis.title.x.bottom = element_text(hjust = 0.50),
+
+      axis.ticks.length.y.left = unit(-.5, units = "cm"), # -.8 w/ .6
+      axis.ticks.length.x.bottom = unit(0, units = "cm"),
+
+      axis.ticks.y.left = element_line(color = "black"),
+
+      axis.text.y.left = element_text(color = "black",
+                                      margin = margin(r = 0.6, unit = "cm")),
+      axis.text.x.bottom = element_text(color = "black",
+                                        margin = margin(t = -0.45, unit = "cm")),
+
+
+      panel.background = element_rect(fill = "White", # def = "grey92"
+                                      color = NA)
+      # panel.grid.major.y = element_line(color = "black",
+      #                                   size = 1, # 0.5 = default
+      #                                   linetype = "solid",
+      #                                   lineend = "square",
+      #                                   arrow = NULL,
+      #                                   inherit.blank = FALSE),
+    )
+
+
+
+  # plot - combined WINNER----
+  ggplot(data = graph) +
+    geom_bar_pattern(
+      mapping = aes(x = Posture,
+                    y = value,
+                    fill = Classification,
+                    pattern = Classification,
+                    pattern_alpha = Classification,
+                    pattern_shape = Classification,
+                    pattern_angle = Classification,
+                    pattern_density = Classification
+      ),
+      color = "black",
+      size = 1,
+      stat = "identity",
+      pattern_fill = "black",
+      pattern_color = "black",
+      pattern_spacing = 0.01
+    ) +
+    scale_pattern_manual(
+      # values = c("stripe",
+      #            "crosshatch",
+      #            "circle",
+      #            "stripe",
+      #            "stripe")
+      values = c("stripe",
+                 "circle",
+                 "stripe",
+                 "stripe",
+                 "crosshatch")
+    ) +
+    scale_pattern_angle_manual(
+      # values = c(0,
+      #            45,
+      #            45,
+      #            0,
+      #            90)
+      values = c(0,
+                 45,
+                 0,
+                 90,
+                 45)
+    ) +
+    scale_pattern_alpha_manual(
+      values = c(0,
+                 0.2,
+                 0.2,
+                 0.2,
+                 0.2)
+    ) +
+    scale_pattern_density_manual(
+      values = c(0.2,
+                 0.2,
+                 0.2,
+                 0.2,
+                 0.2)
+    ) +
+    geom_text(
+      data = lbl,
+      mapping = aes(x = Posture,
+                    y = label,
+                    label = paste(AP_Total, "mins")),
+      vjust = -0.5
+    ) +
+    geom_label(
+      data = graph_pos[!(graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct"), ],
+      mapping = aes(x = Posture,
+                    y = pos,
+                    # fill = Classification,
+                    label = paste0(value, "%")),
+      # position = position_stack(vjust = 0.5),
+      label.padding = unit(0.3, "lines"),
+      label.size = 1,
+      show.legend = FALSE
+    ) +
+    geom_label_repel(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(x = Posture,
+                    y = pos, # value if you want color in label
+                    # fill = Classification,
+                    label = paste0(value, "%")),
+      # position = position_stack(vjust = 0.5),
+      box.padding = 0.25, # def = 0.25
+      label.padding = 0.3, # def = 0.25
+      point.padding = 0, # def
+      label.r = 0.15, # def = 0.15
+      label.size = 1, # def = 0.5
+      segment.color = "black", # def
+      segment.size = 2.0, # def = 0.5
+      segment.alpha = 1.0, # def
+      # arrow = arrow(angle = 30,
+      #               length = unit(0.03,
+      #                             "npc"),
+      #               type = "closed",
+      #               ends = "first"),
+      force = 1,
+      max.iter = 2000,
+      # nudge_x = 0,
+      # nudge_y = 0,
+      xlim = c(0.55, 1.45),
+      ylim = c(16, NA),
+      show.legend = FALSE,
+      direction = "x"
+    ) +
+    geom_point(
+      data = graph_pos[graph_pos$Posture == "Sit" & graph_pos$Classification != "Correct", ],
+      mapping = aes(
+        x = Posture,
+        y = pos #value if you want color in label
+        # fill = Classification
+      ),
+      # position = position_stack(vjust = 0.5),
+      size = 3,
+      shape = 21,
+      fill = "white",
+      color = "black",
+      show.legend = FALSE
+    ) +
+    scale_y_continuous(
+      name = "% of Total activPAL Estimates",
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(mult = c(0.05, 0.05)) # for cont, mult 5% = default
+    ) +
+    scale_x_discrete(
+      name = waiver(),
+      breaks = waiver(),
+      labels = waiver(),
+      limits = NULL,
+      expand = expansion(add = c(0.54, 0.54)) # for disc, add 0.6 units = default
+    ) +
+    labs(
+      title = "Proportion of Total activPAL estimates classified by Images",
+      x = "Posture",
+      y = "% of Total activPAL Estimates"
+    ) +
+    theme(
+      line = element_line(
+        color = "black", # def = black
+        size = 1, # def = 0.5
+        linetype = NULL, # def = solid
+        lineend = NULL, # def = square
+        arrow = NULL, # def = none
+        inherit.blank = FALSE
+      ),
+      rect = element_rect(
+        fill = NULL, # def varies
+        color = NULL, # ???
+        size = NULL, # border size
+        linetype = NULL,
+        inherit.blank = FALSE
+      ),
+      text = element_text(
+        family = NULL,
+        face = NULL,
+        color = "black",
+        size = 17, #### CHANGED
+        hjust = NULL,
+        vjust = NULL,
+        angle = NULL,
+        lineheight = NULL,
+        margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+        debug = FALSE,
+        inherit.blank = FALSE
+      ),
+      title = element_text(
+        face = "bold",
+        debug = FALSE
+      ),
+      plot.title = element_text(face = "bold",
+                                hjust = 0.5),
+
+      axis.ticks.length.y.left = unit(-.5, units = "cm"), # -.8 w/ .6
+      axis.ticks.length.x.bottom = unit(0, units = "cm"),
+
+      axis.ticks.y.left = element_line(color = "black"),
+
+      axis.text.y.left = element_text(color = "black",
+                                      margin = margin(r = 0.6, unit = "cm")),
+      axis.text.x.bottom = element_text(color = "black",
+                                        margin = margin(t = -0.45, unit = "cm")),
+
+
+      panel.background = element_rect(fill = "White", # def = "grey92"
+                                      color = NA)
+    ) +
+    scale_fill_manual(
+      values = graph_colors
+    )
+
+}
 
 
 # figures & tables --------------------------------------------------------
