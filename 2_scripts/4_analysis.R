@@ -74,7 +74,7 @@ create_confusion_table(
 
 
 
-# bland-altman plot -------------------------------------------------------
+# Bland-Altman Plot: AP as x-axis -----------------------------------------
 # 1024x500 pixels, 92 dpi = 11.13x5.43in
 tbl_minutes <- 
   vroom(
@@ -87,7 +87,7 @@ tbl_bias_minutes <-
 
 # library(blandr)
 
-# points
+# points: using ap as x-axis
 gpt_bland_points <- 
   tibble(
     posture = c(rep("sit",
@@ -104,6 +104,7 @@ gpt_bland_points <-
                 tbl_minutes$event_img_mov - tbl_minutes$event_ap_mov),
     .rows = nrow(tbl_minutes) * 3
   ) 
+
 # gpt_bland_points$posture <- 
 #   gpt_bland_points$posture %>% 
 #   forcats::as_factor()
@@ -125,32 +126,202 @@ gpt_bland_lines$loa_upper <-
 
 # text
 gpt_bland_text <- 
-  gpt_bland_lines
-gpt_bland_text$position <- 
-  c(75, 55, 57)
-gpt_bland_text$text_upper <- 
-  paste("ULOA = ",
-        gpt_bland_text$loa_upper,
-        "minutes",
-        sep = " ")
-gpt_bland_text$text_bias <- 
-  paste("BIAS  =",
-        gpt_bland_text$bias,
-        "minutes",
-        sep = " ")
-gpt_bland_text$text_lower <- 
-  paste("LLOA =",
-        gpt_bland_text$loa_lower,
-        "minutes",
-        sep = " ")
-gpt_bland_text$xmin <- 
-  c(44.5, 33, 34)
-c(47.5, 36, 37)
-c(37, 27, 28)
-gpt_bland_text$xmax <- 
-  c(105.5, 77, 80)
-c(102.5, 74, 77)
-c(113, 83, 85)
+  gpt_bland_lines[, !(colnames(gpt_bland_lines) == "se")]
+# gpt_bland_text$position <- 
+#   c(75, 55, 57)
+# gpt_bland_text$text_upper <- 
+#   paste("ULOA = ",
+#         gpt_bland_text$loa_upper,
+#         "minutes",
+#         sep = " ")
+# gpt_bland_text$text_bias <- 
+#   paste("BIAS  =",
+#         gpt_bland_text$bias,
+#         "minutes",
+#         sep = " ")
+# gpt_bland_text$text_lower <- 
+#   paste("LLOA =",
+#         gpt_bland_text$loa_lower,
+#         "minutes",
+#         sep = " ")
+
+gpt_bland_text$text_uloa_1 <- 
+  rep("ULOA",
+      times = 3)
+gpt_bland_text$text_uloa_2 <- 
+  rep("=",
+      times = 3)
+gpt_bland_text$text_uloa_3 <- 
+  gpt_bland_text$loa_upper %>% 
+  as.character()
+gpt_bland_text$text_uloa_4 <- 
+  rep("minutes",
+      times = 3)
+gpt_bland_text$text_bias_1 <- 
+  rep("BIAS  ",
+      times = 3)
+gpt_bland_text$text_bias_2 <- 
+  rep("=",
+      times = 3)
+gpt_bland_text$text_bias_3 <- 
+  gpt_bland_text$bias %>% 
+  as.character()
+gpt_bland_text$text_bias_4 <- 
+  rep("minutes",
+      times = 3)
+gpt_bland_text$text_lloa_1 <- 
+  rep("LLOA",
+      times = 3)
+gpt_bland_text$text_lloa_2 <- 
+  rep("=",
+      times = 3)
+gpt_bland_text$text_lloa_3 <- 
+  gpt_bland_text$loa_lower %>% 
+  as.character()
+gpt_bland_text$text_lloa_4 <- 
+  rep("minutes",
+      times = 3)
+
+gpt_bland_text <- 
+  gpt_bland_text[, !(colnames(gpt_bland_text) %in% c("bias", "loa_lower", "loa_upper"))]
+
+lgl_uloa_1 <- (
+  gpt_bland_text$text_uloa_3 %>% 
+    str_length()
+) == 4
+lgl_bias_1 <- (
+  gpt_bland_text$text_bias_3 %>% 
+    str_length()
+) == 4
+lgl_lloa_1 <- (
+  gpt_bland_text$text_lloa_3 %>% 
+    str_length()
+) == 4
+lgl_uloa_2 <- (
+  gpt_bland_text$text_uloa_3 %>% 
+    str_length()
+) == 5
+lgl_bias_2 <- (
+  gpt_bland_text$text_bias_3 %>% 
+    str_length()
+) == 5
+lgl_lloa_2 <- (
+  gpt_bland_text$text_lloa_3 %>% 
+    str_length()
+) == 5
+
+gpt_bland_text$text_uloa_3[lgl_uloa_1] <- 
+  paste0("  ",
+         gpt_bland_text$text_uloa_3[lgl_uloa_1])
+gpt_bland_text$text_bias_3[lgl_bias_1] <- 
+  paste0("  ",
+         gpt_bland_text$text_bias_3[lgl_bias_1])
+gpt_bland_text$text_lloa_3[lgl_lloa_1] <- 
+  paste0("  ",
+         gpt_bland_text$text_lloa_3[lgl_lloa_1])
+gpt_bland_text$text_uloa_3[lgl_upper_2] <- 
+  paste0(" ",
+         gpt_bland_text$text_uloa_3[lgl_upper_2])
+gpt_bland_text$text_bias_3[lgl_bias_2] <- 
+  paste0(" ",
+         gpt_bland_text$text_bias_3[lgl_bias_2])
+gpt_bland_text$text_lloa_3[lgl_lloa_2] <- 
+  paste0(" ",
+         gpt_bland_text$text_lloa_3[lgl_lloa_2])
+
+gpt_bland_text$text_uloa_3 <- 
+  paste0(" ",
+         gpt_bland_text$text_uloa_3)
+gpt_bland_text$text_bias_3 <- 
+  paste0(" ",
+         gpt_bland_text$text_bias_3)
+gpt_bland_text$text_lloa_3[3] <- 
+  paste0(" ",
+         gpt_bland_text$text_lloa_3[3])
+gpt_bland_text$text_bias_3[c(1, 3)] <- 
+  paste0(" ",
+         gpt_bland_text$text_bias_3[c(1, 3)])
+gpt_bland_text$text_uloa_3[2] <- 
+  paste0(" ",
+         gpt_bland_text$text_uloa_3[2])
+
+test <- 
+  gpt_bland_text %>% 
+  melt(id.vars = "posture",
+       value.name = "text")
+test$posture <- 
+  gpt_bland_text$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+test <- 
+  test[order(test$posture),]
+max_sit <- 
+  gpt_bland_points$ap[gpt_bland_points$posture == "Sit"] %>% 
+  max()
+max_sta <- 
+  gpt_bland_points$ap[gpt_bland_points$posture == "Stand"] %>% 
+  max()
+max_mov <- 
+  gpt_bland_points$ap[gpt_bland_points$posture == "Move"] %>% 
+  max()
+test$x <- 
+  c(
+    rep(c((max_sit * 0.47), 
+          (max_sit * 0.57),
+          (max_sit * 0.67),
+          (max_sit * 0.85)),
+        times = 3),
+    rep(c((max_sta * 0.47), 
+          (max_sta * 0.57),
+          (max_sta * 0.67),
+          (max_sta * 0.85)),
+        times = 3),
+    rep(c((max_mov * 0.47), 
+          (max_mov * 0.57),
+          (max_mov * 0.67),
+          (max_mov * 0.85)),
+        times = 3)
+  )
+c(rep(c(53.5, 65, 75, 95),
+      times = 3),
+  rep(c(40, 48, 55, 69),
+      times = 3),
+  rep(c(41, 49, 57, 72),
+      times = 3))
+test$y <- 
+  rep(c(38, 35, 32),
+      each = 4)
+# rep(c(80, 74, 68),
+#     each = 4)
+# test$color <- 
+#   rep(c("#2171B5", "black", "#2171B5"),
+#       each = 12)
+gpt_bland_rect <- 
+  tibble(
+    posture = c("sit",
+                "stand",
+                "move"),
+    xmin    = c((max_sit * 0.38),
+                (max_sta * 0.38),
+                (max_mov * 0.38)), # c(44.5, 33, 34)
+    # c(47.5, 36, 37)
+    # c(37, 27, 28)
+    xmax    = c((max_sit * 0.95),
+                (max_sta * 0.95),
+                (max_mov * 0.95)
+    ) # c(105.5, 77, 80)
+    # c(102.5, 74, 77)
+    # c(113, 83, 85)
+  )
+# gpt_bland_text$xmin <- 
+#   c(44.5, 33, 34)
+# c(47.5, 36, 37)
+# c(37, 27, 28)
+# gpt_bland_text$xmax <- 
+#   c(105.5, 77, 80)
+# c(102.5, 74, 77)
+# c(113, 83, 85)
+
 
 # Outliers
 gpt_bland_outliers <- 
@@ -158,32 +329,32 @@ gpt_bland_outliers <-
     (
       gpt_bland_points$posture == "sit" &
         (gpt_bland_points$diff > 
-           gpt_bland_text$loa_upper[gpt_bland_text$posture == "sit"])
+           gpt_bland_lines$loa_upper[gpt_bland_lines$posture == "sit"])
     ) |
       (
         gpt_bland_points$posture == "stand" &
           (gpt_bland_points$diff > 
-             gpt_bland_text$loa_upper[gpt_bland_text$posture == "stand"])
+             gpt_bland_lines$loa_upper[gpt_bland_lines$posture == "stand"])
       ) |
       (
         gpt_bland_points$posture == "move" &
           (gpt_bland_points$diff > 
-             gpt_bland_text$loa_upper[gpt_bland_text$posture == "move"])
+             gpt_bland_lines$loa_upper[gpt_bland_lines$posture == "move"])
       ) |
       (
         gpt_bland_points$posture == "sit" &
           (gpt_bland_points$diff < 
-             gpt_bland_text$loa_lower[gpt_bland_text$posture == "sit"])
+             gpt_bland_lines$loa_lower[gpt_bland_lines$posture == "sit"])
       ) |
       (
         gpt_bland_points$posture == "stand" &
           (gpt_bland_points$diff < 
-             gpt_bland_text$loa_lower[gpt_bland_text$posture == "stand"])
+             gpt_bland_lines$loa_lower[gpt_bland_lines$posture == "stand"])
       ) |
       (
         gpt_bland_points$posture == "move" &
           (gpt_bland_points$diff < 
-             gpt_bland_text$loa_lower[gpt_bland_text$posture == "move"])
+             gpt_bland_lines$loa_lower[gpt_bland_lines$posture == "move"])
       ), ]
 
 # Title Posture.
@@ -195,12 +366,16 @@ gpt_bland_lines$posture <-
   gpt_bland_lines$posture %>% 
   str_to_title() %>% 
   forcats::as_factor()
-gpt_bland_text$posture <- 
-  gpt_bland_text$posture %>% 
-  str_to_title() %>% 
-  forcats::as_factor()
+# gpt_bland_text$posture <- 
+#   gpt_bland_text$posture %>% 
+#   str_to_title() %>% 
+#   forcats::as_factor()
 gpt_bland_outliers$posture <- 
   gpt_bland_outliers$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+gpt_bland_rect$posture <- 
+  gpt_bland_rect$posture %>% 
   str_to_title() %>% 
   forcats::as_factor()
 
@@ -210,28 +385,35 @@ gpt_bland_lines <-
   melt(id.vars = "posture",
        measure.vars = c("loa_upper","bias", "loa_lower"),
        value.name = "value")
-gpt_bland_text$text_bias[1] <- 
-  paste("BIAS  =   ",
-        gpt_bland_text$bias[1],
-        "minutes",
-        sep = " ")
-gpt_bland_text$text_bias[2] <- 
-  paste("BIAS  =  ",
-        gpt_bland_text$bias[2],
-        "minutes",
-        sep = " ")
-gpt_bland_text$text_bias[3] <- 
-  paste("BIAS  =   ",
-        gpt_bland_text$bias[3],
-        "minutes",
-        sep = " ")
-gpt_bland_text$text_lower[3] <- 
-  paste("LLOA =",
-        "-30.40",
-        "minutes",
-        sep = " ")
 
-
+# # Finding visits that have outliers
+# paste(
+#   tbl_minutes$id[tbl_minutes$event_ap_sit %in% 
+#                    gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Sit"]],
+#   tbl_minutes$visit[tbl_minutes$event_ap_sit %in% 
+#                       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Sit"]]
+# )
+# paste(
+#   tbl_minutes$id[tbl_minutes$event_ap_sta %in% 
+#                    gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Stand"]],
+#   tbl_minutes$visit[tbl_minutes$event_ap_sta %in% 
+#                       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Stand"]]
+# )
+# paste(
+#   tbl_minutes$id[tbl_minutes$event_ap_mov %in% 
+#                    gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Move"]],
+#   tbl_minutes$visit[tbl_minutes$event_ap_mov %in%
+#                       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Move"]]
+# )
+# test <- 
+#   tbl_minutes[
+#     tbl_minutes$event_ap_sit %in% 
+#       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Sit"] |
+#       tbl_minutes$event_ap_sta %in% 
+#       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Stand"] |
+#       tbl_minutes$event_ap_mov %in%
+#       gpt_bland_outliers$ap[gpt_bland_outliers$posture == "Move"], c(1,2,14:19)
+#     ]
 
 # PLOT
 ggplot(
@@ -241,26 +423,28 @@ ggplot(
     mapping = aes(x = ap,
                   y = diff)
   ) +
-  geom_point(
-    data = gpt_bland_outliers,
-    mapping = aes(x = ap,
-                  y = diff),
-    color = "#DE2D26"
-  ) +
-  geom_text_repel(
-    data = gpt_bland_outliers,
-    mapping = aes(x = ap,
-                  y = diff,
-                  label = round(diff, digits = 2)),
-    direction = "x"
-  ) +
+  # geom_point(
+  #   data = gpt_bland_outliers,
+  #   mapping = aes(x = ap,
+  #                 y = diff),
+  #   color = "#DE2D26"
+  # ) +
+  # geom_text_repel(
+  #   data = gpt_bland_outliers,
+  #   mapping = aes(x = ap,
+  #                 y = diff,
+  #                 label = round(diff, digits = 2)),
+  #   direction = "both"
+  # ) +
   facet_wrap(
     facets = vars(posture),
     scales = "free_x"
   ) +
   scale_y_continuous(
-    breaks = c(-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75),
-    limits = c(-71.06667, 83.7)
+    breaks = c(-30, -15, 0, 15, 30),
+    # c(-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75)
+    limits = c(-40, 40) # use max and min on gpt_bland_points$diff 
+    # c(-71.06667, 83.7) c(-34.28333, 31.91667)
   ) +
   geom_hline(
     yintercept = 0,
@@ -279,41 +463,53 @@ ggplot(
   #   mapping  = aes(label = )
   # ) +
   geom_text(
-    data     = gpt_bland_text,
-    mapping  = aes(x = position,
-                   label = text_upper),
-    y = 80,
-    color    = "#2171B5",
+    data = test,
+    mapping = aes(x = x,
+                  y = y,
+                  label = text),
+    color = rep(rep(c("#2171B5", "black", "#2171B5"),
+                    each = 4),
+                times = 3),
     size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
     family   = "sans",
     fontface = "plain"
   ) +
-  geom_text(
-    data     = gpt_bland_text,
-    mapping  = aes(x = position,
-                   label = text_bias),
-    y = 74,
-    color    = "black",
-    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
-    family   = "sans",
-    fontface = "plain"
-  ) +
-  geom_text(
-    data     = gpt_bland_text,
-    mapping  = aes(x = position,
-                   label = text_lower),
-    y = 68,
-    color    = "#2171B5",
-    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
-    family   = "sans",
-    fontface = "plain"
-  ) +
+  # geom_text(
+  #   data     = gpt_bland_text,
+  #   mapping  = aes(x = position,
+  #                  label = text_upper),
+  #   y = 80,
+  #   color    = "#2171B5",
+  #   size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+  #   family   = "sans",
+  #   fontface = "plain"
+  # ) +
+  # geom_text(
+  #   data     = gpt_bland_text,
+  #   mapping  = aes(x = position,
+  #                  label = text_bias),
+  #   y = 74,
+  #   color    = "black",
+  #   size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+  #   family   = "sans",
+  #   fontface = "plain"
+  # ) +
+  # geom_text(
+  #   data     = gpt_bland_text,
+  #   mapping  = aes(x = position,
+  #                  label = text_lower),
+  #   y = 68,
+  #   color    = "#2171B5",
+  #   size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+  #   family   = "sans",
+  #   fontface = "plain"
+  # ) +
   geom_rect(
-    data = gpt_bland_text,
+    data = gpt_bland_rect,
     mapping = aes(xmin = xmin,
                   xmax = xmax),
-    ymin = 64,
-    ymax = 84,
+    ymin = 30, # 64 before
+    ymax = 40, # 84 before
     color = "black",
     size = 0.5,
     fill = NA
@@ -379,10 +575,16 @@ ggplot(
   ) +
   labs(
     title = waiver(),
-    x = "activPAL Estimates",
-    y = "Difference\n(Image - activPAL)"
+    x = "activPAL Estimates (Minutes)",
+    y = "Difference in Minutes\n(Image - activPAL)"
   )
-ggplot2::ggsave()
+╟ggsave("test",
+       plot = last_plot(),
+       device = "pdf",
+       path = getwd(),
+       width = "11.13",
+       height = "5.43",
+       units = "in")
 # 
 # outliers
 # lst_diff_upper <- 
@@ -813,6 +1015,693 @@ plot(
 
 
 abline(0, 1)
+
+
+# Bland-Altman Plot: Mean as x-axis ---------------------------------------
+# 1024x500 pixels, 92 dpi = 11.13x5.43in
+tbl_minutes <- 
+  vroom(
+    file = "./3_data/analysis/table_processed_minutes.csv",
+    delim = ",",
+    progress = FALSE
+  )
+tbl_bias_minutes <-
+  readr::read_rds(path = "./4_results/table_bias_minutes.rds")
+
+# Points: using mean as x-axis
+gpt_bland_points <- 
+  tibble(
+    posture = c(rep("sit",
+                    times = nrow(tbl_minutes)),
+                rep("stand",
+                    times = nrow(tbl_minutes)),
+                rep("move",
+                    times = nrow(tbl_minutes))),
+    ap      = c((tbl_minutes$event_ap_sit + tbl_minutes$event_img_sit) / 2,
+                (tbl_minutes$event_ap_sta + tbl_minutes$event_img_sta) / 2,
+                (tbl_minutes$event_ap_mov + tbl_minutes$event_img_mov) / 2),
+    diff    = c(tbl_minutes$event_img_sit - tbl_minutes$event_ap_sit,
+                tbl_minutes$event_img_sta - tbl_minutes$event_ap_sta,
+                tbl_minutes$event_img_mov - tbl_minutes$event_ap_mov),
+    .rows = nrow(tbl_minutes) * 3
+  ) 
+
+# gpt_bland_points$posture <- 
+#   gpt_bland_points$posture %>% 
+#   forcats::as_factor()
+
+# lines
+gpt_bland_lines <- 
+  tbl_bias_minutes[, c("posture",
+                       "bias",
+                       "se")]
+gpt_bland_lines$loa_lower <- 
+  gpt_bland_lines$bias -
+  2 * gpt_bland_lines$se
+gpt_bland_lines$loa_upper <- 
+  gpt_bland_lines$bias +
+  2 * gpt_bland_lines$se
+# gpt_bland_lines$posture <- 
+#   gpt_bland_lines$posture %>% 
+#   forcats::as_factor()
+
+# text
+gpt_bland_text <- 
+  gpt_bland_lines
+gpt_bland_text$position <- 
+  c(75, 55, 57)
+gpt_bland_text$text_upper <- 
+  paste("ULOA = ",
+        gpt_bland_text$loa_upper,
+        "minutes",
+        sep = " ")
+gpt_bland_text$text_bias <- 
+  paste("BIAS  =",
+        gpt_bland_text$bias,
+        "minutes",
+        sep = " ")
+gpt_bland_text$text_lower <- 
+  paste("LLOA =",
+        gpt_bland_text$loa_lower,
+        "minutes",
+        sep = " ")
+gpt_bland_text$xmin <- 
+  c(44.5, 33, 34)
+c(47.5, 36, 37)
+c(37, 27, 28)
+gpt_bland_text$xmax <- 
+  c(105.5, 77, 80)
+c(102.5, 74, 77)
+c(113, 83, 85)
+
+# Outliers
+gpt_bland_outliers <- 
+  gpt_bland_points[
+    (
+      gpt_bland_points$posture == "sit" &
+        (gpt_bland_points$diff > 
+           gpt_bland_text$loa_upper[gpt_bland_text$posture == "sit"])
+    ) |
+      (
+        gpt_bland_points$posture == "stand" &
+          (gpt_bland_points$diff > 
+             gpt_bland_text$loa_upper[gpt_bland_text$posture == "stand"])
+      ) |
+      (
+        gpt_bland_points$posture == "move" &
+          (gpt_bland_points$diff > 
+             gpt_bland_text$loa_upper[gpt_bland_text$posture == "move"])
+      ) |
+      (
+        gpt_bland_points$posture == "sit" &
+          (gpt_bland_points$diff < 
+             gpt_bland_text$loa_lower[gpt_bland_text$posture == "sit"])
+      ) |
+      (
+        gpt_bland_points$posture == "stand" &
+          (gpt_bland_points$diff < 
+             gpt_bland_text$loa_lower[gpt_bland_text$posture == "stand"])
+      ) |
+      (
+        gpt_bland_points$posture == "move" &
+          (gpt_bland_points$diff < 
+             gpt_bland_text$loa_lower[gpt_bland_text$posture == "move"])
+      ), ]
+
+# Title Posture.
+gpt_bland_points$posture <- 
+  gpt_bland_points$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+gpt_bland_lines$posture <- 
+  gpt_bland_lines$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+gpt_bland_text$posture <- 
+  gpt_bland_text$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+gpt_bland_outliers$posture <- 
+  gpt_bland_outliers$posture %>% 
+  str_to_title() %>% 
+  forcats::as_factor()
+
+# Final (after testing within plot)
+gpt_bland_lines <- 
+  gpt_bland_lines %>% 
+  melt(id.vars = "posture",
+       measure.vars = c("loa_upper","bias", "loa_lower"),
+       value.name = "value")
+gpt_bland_text$text_bias[1] <- 
+  paste("BIAS  =   ",
+        gpt_bland_text$bias[1],
+        "minutes",
+        sep = " ")
+gpt_bland_text$text_bias[2] <- 
+  paste("BIAS  =  ",
+        gpt_bland_text$bias[2],
+        "minutes",
+        sep = " ")
+gpt_bland_text$text_bias[3] <- 
+  paste("BIAS  =   ",
+        gpt_bland_text$bias[3],
+        "minutes",
+        sep = " ")
+gpt_bland_text$text_lower[3] <- 
+  paste("LLOA =",
+        "-30.40",
+        "minutes",
+        sep = " ")
+
+
+
+# PLOT
+ggplot(
+  data = gpt_bland_points
+) +
+  geom_point(
+    mapping = aes(x = ap,
+                  y = diff)
+  ) +
+  geom_point(
+    data = gpt_bland_outliers,
+    mapping = aes(x = ap,
+                  y = diff),
+    color = "#DE2D26"
+  ) +
+  geom_text_repel(
+    data = gpt_bland_outliers,
+    mapping = aes(x = ap,
+                  y = diff,
+                  label = round(diff, digits = 2)),
+    direction = "x"
+  ) +
+  facet_wrap(
+    facets = vars(posture),
+    scales = "free_x"
+  ) +
+  scale_y_continuous(
+    breaks = c(-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75),
+    limits = c(-71.06667, 83.7)
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "solid",
+    alpha = 0.2
+  ) +
+  geom_hline( # works 
+    data     = gpt_bland_lines,
+    mapping  = aes(yintercept = value),
+    color    = rep(c("#2171B5", "black", "#2171B5"), each = 3),
+    size     = 1, # mm, def = 0.5
+    linetype = rep(c("dashed", "dashed", "dashed"), each = 3)
+  ) +
+  # geom_label(
+  #   data     = gpt_bland_text,
+  #   mapping  = aes(label = )
+  # ) +
+  geom_text(
+    data     = gpt_bland_text,
+    mapping  = aes(x = position,
+                   label = text_upper),
+    y = 80,
+    color    = "#2171B5",
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  geom_text(
+    data     = gpt_bland_text,
+    mapping  = aes(x = position,
+                   label = text_bias),
+    y = 74,
+    color    = "black",
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  geom_text(
+    data     = gpt_bland_text,
+    mapping  = aes(x = position,
+                   label = text_lower),
+    y = 68,
+    color    = "#2171B5",
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  geom_rect(
+    data = gpt_bland_text,
+    mapping = aes(xmin = xmin,
+                  xmax = xmax),
+    ymin = 64,
+    ymax = 84,
+    color = "black",
+    size = 0.5,
+    fill = NA
+  ) +
+  theme(
+    line = element_line(
+      color = "black", # def = black
+      size = 1, # def = 0.5
+      linetype = NULL, # def = solid
+      lineend = NULL, # def = square
+      arrow = NULL, # def = none
+      inherit.blank = FALSE
+    ),
+    rect = element_rect(
+      fill = NULL, # def varies
+      color = NULL, # ???
+      size = NULL, # border size
+      linetype = NULL,
+      inherit.blank = FALSE
+    ),
+    text = element_text(
+      family = NULL,
+      face = NULL,
+      color = "black",
+      size = 11, # pt, def = 11
+      hjust = NULL,
+      vjust = NULL,
+      angle = NULL,
+      lineheight = NULL,
+      margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+      debug = FALSE,
+      inherit.blank = FALSE
+    ),
+    title = element_text(
+      face = "bold",
+      debug = FALSE
+    ),
+    plot.title = element_text(face = "bold",
+                              hjust = 0.5),
+    
+    axis.ticks.length.y.left   = unit(-1.5, units = "mm"),
+    axis.ticks.length.x.bottom = unit(-1.5, units = "mm"),
+    
+    axis.ticks.y.left = element_line(color = "black"),
+    
+    axis.text.y.left   = element_text(
+      color = "black",
+      margin = margin(r = 2, unit = "mm")
+    ),
+    axis.text.x.bottom = element_text(
+      color = "black",
+      margin = margin(t = 2, unit = "mm")
+    ),
+    panel.background = element_rect(fill = "White", # def = "grey92"
+                                    color = "black",
+                                    size = 1),
+    panel.grid       = element_line(color = NA),
+    # plot.background = 
+    strip.text       = element_text(face = "bold",
+                                    size = 11),
+    strip.background = element_rect(fill = NA,
+                                    color = NA)
+  ) +
+  labs(
+    title = waiver(),
+    x = "Mean",
+    y = "Difference\n(Image - activPAL)"
+  )
+ggplot2::ggsave()
+# 
+# outliers
+# lst_diff_upper <- 
+#   list(
+#     gpt_bland_points$diff[gpt_bland_points$posture == "sit" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[1])],
+#     gpt_bland_points$diff[gpt_bland_points$posture == "stand" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[2])],
+#     gpt_bland_points$diff[gpt_bland_points$posture == "move" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[3])]
+#   )
+# lst_diff_lower <- 
+#   list(
+#     gpt_bland_points$diff[gpt_bland_points$posture == "sit" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[1])],
+#     gpt_bland_points$diff[gpt_bland_points$posture == "stand" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[2])],
+#     gpt_bland_points$diff[gpt_bland_points$posture == "move" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[3])]
+#   )
+# lst_ap_upper <- 
+#   list(
+#     gpt_bland_points$ap[gpt_bland_points$posture == "sit" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[1])],
+#     gpt_bland_points$ap[gpt_bland_points$posture == "stand" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[2])],
+#     gpt_bland_points$ap[gpt_bland_points$posture == "move" &
+#                             (gpt_bland_points$diff > 
+#                                gpt_bland_text$loa_upper[3])]
+#   )
+# lst_ap_lower <- 
+#   list(
+#     gpt_bland_points$ap[gpt_bland_points$posture == "sit" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[1])],
+#     gpt_bland_points$ap[gpt_bland_points$posture == "stand" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[2])],
+#     gpt_bland_points$ap[gpt_bland_points$posture == "move" &
+#                             (gpt_bland_points$diff < 
+#                                gpt_bland_text$loa_lower[3])]
+#   )
+# times_upper <- 
+#   sapply(lst_diff_upper, 
+#          FUN = length)
+# times_lower <- 
+#   sapply(lst_diff_lower, 
+#          FUN = length)
+# gpt_bland_outliers <- 
+#   tibble(
+#     posture   = c(rep(c("sit", "stand", "move"),
+#                       times = times_upper),
+#                   rep(c("sit", "stand", "move"),
+#                       times = times_lower)),
+#     direction = c(rep("upper",
+#                       times = sum(times_upper)),
+#                   rep("lower",
+#                       times = sum(times_lower))),
+#     ap        = c(unlist(lst_ap_upper),
+#                   unlist(lst_ap_lower)),
+#     diff      = c(unlist(lst_diff_upper),
+#                   unlist(lst_diff_lower)),
+#     .rows = length(c(unlist(lst_diff_upper),
+#                      unlist(lst_diff_lower)))
+#   )
+# gpt_bland_outliers$posture <- 
+#   gpt_bland_outliers$posture %>% 
+#   forcats::as_factor()
+# x <- tbl_minutes$event_ap_sit
+# y <- tbl_minutes$event_ap_sit - tbl_minutes$event_img_sit
+# 
+# blandr.display.and.draw(
+#   method1 = tbl_minutes$event_ap_sit,
+#   method2 = tbl_minutes$event_img_sit,
+#   plotter = "ggplot"
+# )
+# 
+# 
+# 
+# stat <- 
+# blandr.statistics(
+#   method1 = tbl_minutes$event_ap_sit,
+#   method2 = tbl_minutes$event_img_sit,
+#   sig.level = 0.95
+# )
+# 
+# stat$differences
+# stat$method1
+# 
+# df <- 
+#   structure(
+#     list(
+#       Lightbox = c(84L, 67L, 80L, 63L, 76L, 66L, 79L, 81L, 77L, 82L,
+#                    84L, 67L, 80L, 63L, 76L, 66L, 79L, 81L, 77L, 82L, 
+#                    84L, 67L, 80L, 63L, 76L, 66L, 79L, 81L, 77L, 82L, 
+#                    84L, 67L, 80L, 63L, 76L, 66L, 79L, 81L, 77L, 82L,
+#                    84L, 67L, 80L, 63L, 76L, 66L, 79L, 81L, 77L, 82L),
+#       variable = structure(c(1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L,
+#                              2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L,
+#                              3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L,
+#                              4L, 4L, 4L, 4L, 4L, 4L, 4L, 4L, 4L, 4L,
+#                              5L, 5L, 5L, 5L, 5L, 5L, 5L, 5L, 5L, 5L),
+#                            .Label = c("S1", "S2", "S3", "S4", "S5"),
+#                            class = "factor"),
+#       value = c(82L, 65L, 73L, 50L, 50L, 50L, 72L, 56L, 76L, 78L,
+#                 88L, 66L, 71L, 60L, 54L, 55L, 63L, 68L, 73L, 75L,
+#                 73L, 65L, 76L, 57L, 51L, 57L, 75L, 65L, 69L, 66L, 
+#                 77L, 67L, 79L, 58L, 55L, 56L, 77L, 66L, 73L, 80L, 
+#                 78L, 62L, 78L, 52L, 63L, 59L, 71L, 64L, 69L, 89L),
+#       mean  = c(83, 66, 76.5, 56.5, 63, 58, 75.5, 68.5, 76.5, 80,
+#                 86, 66.5, 75.5, 61.5, 65, 60.5, 71, 74.5, 75, 78.5, 
+#                 78.5, 66, 78, 60, 63.5, 61.5, 77, 73, 73, 74, 
+#                 80.5, 67, 79.5, 60.5, 65.5, 61, 78, 73.5, 75, 81, 
+#                 81, 64.5, 79, 57.5, 69.5, 62.5, 75, 72.5, 73, 85.5), 
+#       diff  = c(2L, 2L, 7L, 13L, 26L, 16L, 7L, 25L, 1L, 4L,
+#                 -4L, 1L, 9L, 3L, 22L, 11L, 16L, 13L, 4L, 7L,
+#                 11L, 2L, 4L, 6L, 25L, 9L, 4L, 16L, 8L, 16L,
+#                 7L, 0L, 1L, 5L, 21L, 10L, 2L, 15L, 4L, 2L,
+#                 6L, 5L, 2L, 11L, 13L, 7L, 8L, 17L, 8L, -7L)
+#     ),
+#     .Names = c("Lightbox", "variable", 
+#                "value", "mean", "diff"),
+#     row.names = c(NA, -50L), class = "data.frame"
+#   )
+# 
+# melt(df)
+# geom_hline(data     = gpt_bland_lines,
+#            mapping  = aes(yintercept = vars(upper_loa,
+#                                             bias,
+#                                             lower_loa)),
+#            linetype = c(2, 1, 2),
+#            color    = c("blue", "black", "blue")) +
+#   geom_hline(data     = gpt_bland_lines,
+#              mapping  = aes(yintercept = vars(upper_loa,
+#                                               bias,
+#                                               lower_loa)),
+#              linetype = c(2, 1, 2),
+#              color    = c("blue", "black", "blue")) 
+#   # annotate(
+#   geom = "rect",
+#   xmin = 28, xmax = 85,
+#   ymin = 66, ymax = 83,
+#   color = "black",
+#   size = 1,
+#   fill = NA,
+#   alpha = 1
+# )
+# test <- 
+#   gpt_bland_lines %>% 
+#   melt(id.vars = "posture",
+#        measure.vars = c("loa_upper","bias", "loa_lower"))
+# 
+# ggplot(
+#   data = gpt_bland_points[gpt_bland_points$posture == "sit", ]
+# ) +
+#   geom_point(
+#     mapping = aes(x = ap,
+#                   y = diff)
+#   ) +
+#   geom_hline( # works 
+#     data     = gpt_bland_lines[gpt_bland_lines$posture == "sit", ],
+#     mapping  = aes(yintercept = value),
+#     color    = c("blue", "black", "blue"),
+#     size     = 1, # mm, def = 0.5
+#     linetype = c("dashed", "solid", "dashed")
+#   ) +
+#   geom_text(
+#     data     = gpt_bland_text[gpt_bland_text$posture == "sit", ],
+#     mapping  = aes(x = position,
+#                    y = loa_upper,
+#                    label = text_upper),
+#     color    = "blue",
+#     size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+#     nudge_x  = 4,
+#     nudge_y  = 4,
+#     family   = "sans",
+#     fontface = "plain"
+#   )
+# geom_text(
+#   data     = gpt_bland_text,
+#   mapping  = aes(x = position,
+#                  y = loa_upper,
+#                  label = text_upper),
+#   color    = "blue",
+#   size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+#   nudge_x  = 4,
+#   nudge_y  = 4,
+#   family   = "sans",
+#   fontface = "plain"
+# )
+# gpt_bland_text$text_upper <- 
+#   paste("Upper level of agreement =",
+#         gpt_bland_text$loa_upper,
+#         "minutes",
+#         sep = " ")
+# gpt_bland_text$text_bias <- 
+#   paste("Bias =",
+#         gpt_bland_text$bias,
+#         "minutes",
+#         sep = " ")
+# gpt_bland_text$text_lower <- 
+#   paste("Lower level of agreement =",
+#         gpt_bland_text$loa_lower,
+#         "minutes",
+#         sep = " ")
+# c(
+#   paste("Upper level of agreement =",
+#         gpt_bland_text$value[gpt_bland_text$variable == "loa_upper"],
+#         "minutes",
+#         sep = " "),
+#   paste("Bias =",
+#         gpt_bland_text$value[gpt_bland_text$variable == "bias"],
+#         "minutes",
+#         sep = " "),
+#   paste("Lower level of agreement =",
+#         gpt_bland_text$value[gpt_bland_text$variable == "loa_lower"],
+#         "minutes",
+#         sep = " ")
+# )
+# gpt_bland_text <- 
+#   gpt_bland_text[, !(colnames(gpt_bland_text) %in% c("se"))]
+
+
+# gpt_bland_text %>% 
+#   melt(id.vars = c("posture", "text_upper","text_bias", "text_lower"),
+#        measure.vars = c("text_upper","text_bias", "text_lower"),
+#        value.name = "position")
+# geom_hline(data     = gpt_bland_lines,
+#            mapping  = aes(yintercept = c(loa_upper,
+#                                          bias,
+#                                          loa_lower)),
+#            linetype = c(2, 1, 2),
+#            color    = c("blue", "black", "blue")) +
+
+plt_bland
+ggplot(
+  data = gpt_bland_points
+) +
+  geom_point(
+    mapping = aes(x = ap,
+                  y = diff)
+  ) +
+  geom_hline(
+    data     = gpt_bland_lines,
+    mapping  = aes(yintercept = loa_upper),
+    color    = "blue",
+    size     = 0.5, # mm
+    linetype = "dashed"
+  ) +
+  geom_text(
+    data     = gpt_bland_lines,
+    mapping  = aes(x = 50,
+                   y = loa_upper,
+                   label = paste("Upper Level of Agreement =",
+                                 loa_upper,
+                                 "minutes",
+                                 sep = " ")),
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    nudge_x  = 5,
+    nudge_y  = 5,
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  geom_hline(
+    data     = gpt_bland_lines,
+    mapping  = aes(yintercept = bias),
+    color    = "black",
+    size     = 0.5, # mm
+    linetype = "solid"
+  ) +
+  geom_text(
+    data     = gpt_bland_lines,
+    mapping  = aes(x = 50,
+                   y = bias,
+                   label = paste("Bias =",
+                                 bias,
+                                 "minutes",
+                                 sep = " ")),
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    nudge_y  = 5,
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  geom_hline(
+    data     = gpt_bland_lines,
+    mapping  = aes(yintercept = loa_lower),
+    color    = "blue",
+    size     = 0.5, # mm
+    linetype = "dashed"
+  ) +
+  geom_text(
+    data     = gpt_bland_lines,
+    mapping  = aes(x = 50,
+                   y = loa_lower,
+                   label = paste("Lower Level of Agreement =",
+                                 loa_lower,
+                                 "minutes",
+                                 sep = " ")),
+    size     = 11 / .pt, # mm, 1pt = 0.35mm, 11pt standard
+    nudge_y  = 5,
+    family   = "sans",
+    fontface = "plain"
+  ) +
+  facet_wrap(
+    facets = vars(posture)
+  ) +
+  theme(
+    line = element_line(
+      color = "black", # def = black
+      size = 1, # def = 0.5
+      linetype = NULL, # def = solid
+      lineend = NULL, # def = square
+      arrow = NULL, # def = none
+      inherit.blank = FALSE
+    ),
+    rect = element_rect(
+      fill = NULL, # def varies
+      color = NULL, # ???
+      size = NULL, # border size
+      linetype = NULL,
+      inherit.blank = FALSE
+    ),
+    text = element_text(
+      family = NULL,
+      face = NULL,
+      color = "black",
+      size = 11, # pt, def = 11
+      hjust = NULL,
+      vjust = NULL,
+      angle = NULL,
+      lineheight = NULL,
+      margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+      debug = FALSE,
+      inherit.blank = FALSE
+    ),
+    title = element_text(
+      face = "bold",
+      debug = FALSE
+    ),
+    plot.title = element_text(face = "bold",
+                              hjust = 0.5),
+    
+    axis.ticks.length.y.left = unit(-1.5, units = "mm"), # -.8 w/ .6
+    axis.ticks.length.x.bottom = unit(-1.5, units = "mm"),
+    
+    axis.ticks.y.left = element_line(color = "black"),
+    
+    axis.text.y.left = element_text(
+      color = "black",
+      margin = margin(r = 2, unit = "mm")
+    ),
+    axis.text.x.bottom = element_text(
+      color = "black",
+      margin = margin(t = 2, unit = "mm")
+    ),
+    
+    
+    panel.background = element_rect(fill = "White", # def = "grey92"
+                                    color = "black"),
+    panel.grid = element_line(color = NA),
+    # plot.background = 
+    strip.text = element_text(size = 11)
+  ) +
+  labs(
+    title = waiver(),
+    x = "activPAL Estimates",
+    y = "Difference\n(Annotation - activPAL)"
+  )
+
 
 
 # Figures: Plots ----------------------------------------------------------

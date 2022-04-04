@@ -49,6 +49,12 @@ list_irr <- list.files("./3_data/raw/IRR",
                        ".csv")
 
 read_timestamps(path = "//ufiles.ad.uwm.edu/uwm/pahrl/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv")
+read_timestamps(path = "S:/_V_PAHRL/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp/TimeStamps.csv")
+timestamps <- 
+  read_timestamps(
+    fpa_timestamps = "S:/_V_PAHRL/FLAC/OxfordImageBrowser-win32-x64/Downloaded Annotation Files/MasterTimeStamp",
+    fnm_timestamps = "TimeStamps.csv"
+  )
 
 process_irr(anno_file_list = list_irr,
             corr_times = timestamps,
@@ -58,8 +64,11 @@ process_irr(anno_file_list = list_irr,
 
 # merging -----------------------------------------------------------------
 
-irr_list <- list.files("./3_data/processed/irr_clean",
-                       ".csv")
+irr_list <- 
+  list.files(
+    "./3_data/processed/irr_clean",
+    pattern = ".csv"
+  )
 
 merge_irr(list_irr = irr_list)
 

@@ -7071,3 +7071,106 @@ time_each_event <- c(time_each_event,
 time_each_event[is.na(time_each_event) == T] <- 1
 
 
+
+
+# Time between photos -----------------------------------------------------
+
+fdr_img_set <- "S:/_V_PAHRL/FLAC/OxfordImageBrowser-win32-x64/Browser Images to Annotate"
+
+lst_stu_id_vis <- 
+  list.files("./3_data/raw/annotation",
+             pattern = ".csv") %>% 
+  str_sub(start = 1,
+          end = 11) %>% 
+  str_to_lower()
+
+lst_img_sets <- 
+  list.files(fdr_img_set)
+lst_stu_id_vis %in% lst_img_sets
+
+cnt_breaks <- 0
+
+# Begin mini for loop
+for (i in seq_along(lst_stu_id_vis)) {
+  
+  img_set <- 
+    lst_stu_id_vis[i]
+  message(
+    img_set, "...",
+    appendLF = FALSE
+  )
+  
+  # Get datetimes from file names. Datetime should always be in same location 
+  # within file name.
+  dtm_img_og <- 
+    paste(fdr_img_set,
+          img_set,
+          sep = "/") %>% 
+    list.files(pattern = "JPG") %>% 
+    str_sub(start = 18,
+            end = 32) %>% 
+    lubridate::ymd_hms(tz = "America/Chicago")
+
+  
+  # Difference between first image and next image datetimes.
+  img_diff <- 
+    diff.POSIXt(
+      dtm_img_og,
+      lag = 1,
+      differences = 1
+    ) %>% 
+    as.numeric(units = "secs")
+  
+  diff_mean <- 
+    img_diff %>% 
+    mean()
+  diff_sd <- 
+    img_diff %>% 
+    sd()
+  diff_min <- 
+    img_diff %>% 
+    min()
+  diff_max <- 
+    img_diff %>% 
+    max()
+  
+  tbl_descriptive <- 
+    tibble(
+      study_id_visit = img_set,
+      diff_mean      = diff_mean,
+      diff_sd        = diff_sd,
+      diff_min       = diff_min,
+      diff_max       = diff_max,
+      .rows          = 1
+    )
+  
+  if (cnt_breaks == 0) {
+    
+    vroom_write(
+      tbl_descriptive,
+      path = "./4_results/img_interval_descriptives.csv",
+      delim = ",",
+      append = FALSE,
+      progress = FALSE
+    )
+    
+  } else if (cnt_breaks > 0) {
+    
+    vroom_write(
+      tbl_descriptive,
+      path = "./4_results/img_interval_descriptives.csv",
+      delim = ",",
+      append = TRUE,
+      progress = FALSE
+    )
+    
+  }
+  
+  cnt_breaks <- cnt_breaks + 1
+  
+  message(
+    "DONE",
+    appendLF = TRUE
+  )
+  
+}
