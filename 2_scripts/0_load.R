@@ -19,7 +19,7 @@ library(installr)
 # remotes::install_github("coolbutuseless/ggpattern")
 library(ggpattern)
 
-Q# show warnings for partial matches
+# show warnings for partial matches
 options(warnPartialMatchDollar = TRUE)
 options(warnPartialMatchArgs = TRUE)
 

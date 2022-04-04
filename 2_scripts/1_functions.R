@@ -245,8 +245,8 @@ clean_annotation_files <- function(fpa_img_raw,
   # log_on_off <- on_off_log
   # fpa_img_raw <- "./3_data/raw/annotation"
   # fpa_img_clean <- "./3_data/processed/anno_clean"
-  # which(str_detect(fls_img_raw, pattern = "1068V1"))
-  # fnm_img_raw <- fls_img_raw[1]
+  # which(str_detect(fls_img_raw, pattern = "1068V2"))
+  # fnm_img_raw <- fls_img_raw[22]
   
   cnt_img_cleaned <- 0
   
@@ -538,8 +538,8 @@ clean_annotation_files <- function(fpa_img_raw,
     }
     
     # STEP 4 : Clean (AVSA specific) ----
-    message("Cleaning...\n",
-            appendLF = TRUE)
+    message("Cleaning...",
+            appendLF = FALSE)
     tib_img_vis <- tib_img_sbs[tib_img_sbs$off == 0,]
     tib_img_vis$id <- id
     tib_img_vis$visit <- visit
@@ -604,6 +604,8 @@ clean_annotation_files <- function(fpa_img_raw,
       progress = FALSE
     )
     
+    message("DONE",
+            appendLF = TRUE)
     cnt_img_cleaned <- cnt_img_cleaned + 1
     
   }
@@ -1068,7 +1070,7 @@ clean_activpal_files <- function(fpa_ap_raw,
     }
     
     # STEP 4 : Clean (AVSA Specific) ----
-    message("Cleaning...\n",
+    message("Cleaning...",
             appendLF = TRUE)
     
     # Make file with off time cleaned out. REMEMBER! This still includes
@@ -1101,6 +1103,8 @@ clean_activpal_files <- function(fpa_ap_raw,
       progress = FALSE
     )
 
+    message("DONE",
+            appendLF = TRUE)
     cnt_ap_cleaned <- cnt_ap_cleaned + 1
     
   }
@@ -1474,7 +1478,193 @@ process_irr <- function(anno_file_list,
   }
 }
 
+process_irr_v2 <- function(anno_file_list, 
+                           corr_times,
+                           on_off_log) {
+  
+  anno_file_list <- list_irr
+  corr_times     <- timestamps
+  on_off_log     <- log_on_off
+  
+  # sbs function for code times
+  sbs <- function(i) {
+    
+    new <- seq.POSIXt(mer_anno$NEWstarttime[i],
+                      mer_anno$NEWendtime[i], by = "sec")
+    annotation <- rep(mer_anno$annotation[i],
+                      length(new))
+    data.frame(time = new,
+               annotation = annotation)
+    
+  }
+  
+  # create processed anno files
+  for (i in seq_along(anno_file_list)) {
+    
+    file_name <- anno_file_list[i]
+    
+    message("\nProcessing ", file_name, "...")
+    
+    # difference
+    raw_anno <- read.table(file = paste0("./3_data/raw/IRR/", file_name),
+                           header = T,
+                           sep = ",")
+    
+    raw_anno$startTime <- ymd_hms(raw_anno$startTime,
+                                  tz="UTC")
+    raw_anno$endTime <- ymd_hms(raw_anno$endTime,
+                                tz="UTC")
+    raw_anno$startTime <- with_tz(raw_anno$startTime,
+                                  tzone = "America/Chicago")
+    raw_anno$endTime <- with_tz(raw_anno$endTime,
+                                tzone = "America/Chicago")
+    
+    # merge times and raw
+    id <- as.integer(substr(file_name, 6, 9))
+    visit <- as.integer(substr(file_name, 11, 11))
+    raw_anno$id <- id
+    raw_anno$visit = visit
+    mer_anno <- merge(raw_anno,
+                      corr_times,
+                      by = c("id",
+                             "visit"))
+    
+    # check#1: See if timestamp was entered
+    if (all(is.na(mer_anno$difference))) {
+      
+      raw_anno$startTime <- 
+        raw_anno$startTime %>% 
+        strptime(format="%Y-%m-%d %H:%M:%OS")
+      
+      raw_anno$endTime <- 
+        raw_anno$endTime %>% 
+        strptime(format="%Y-%m-%d %H:%M:%OS")
 
+      
+      # sbs
+      sbs <- function(i) {
+        
+        new <- seq.POSIXt(raw_anno$startTime[i],
+                          raw_anno$endTime[i], by = "sec")
+        annotation <- rep(raw_anno$annotation[i],
+                          length(new))
+        data.frame(time = new,
+                   annotation = annotation)
+        
+      }
+      n <- nrow(raw_anno)
+      l <- lapply(1:n, sbs)
+      sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
+                                     pad())
+      
+      # changing NA's to transition;gap
+      levels <- levels(sbs_anno$annotation)
+      levels[length(levels) + 1] <- "gap"
+      sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                    levels = levels)
+      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "gap"
+      
+      # Clean - avsa specific
+      vis_anno <- sbs_anno # remove off times
+      vis_anno$time <- as.POSIXct(vis_anno$time, 
+                                  tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+      vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+      vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+      vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+      vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
+      vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
+      vis_anno <-vis_anno[, c("time",
+                              "annotation")]
+      
+      # write table, difference compared to process_anno
+      write.table(vis_anno,
+                  file = paste0("./3_data/processed/irr_clean_v2/",
+                                file_name),
+                  sep = ",",
+                  row.names = F)
+        
+    } else {
+      
+      # add diff to times
+      mer_anno <- mer_anno %>%
+        mutate(NEWstarttime = if_else(!is.na(difference),
+                                      startTime + difference,
+                                      startTime))
+      mer_anno <- mer_anno %>%
+        mutate(NEWendtime = if_else(!is.na(difference),
+                                    endTime + difference,
+                                    endTime))
+      
+      # to POSIXlt for padding later 
+      mer_anno$NEWstarttime <- strptime(mer_anno$NEWstarttime,
+                                        format="%Y-%m-%d %H:%M:%OS")
+      mer_anno$NEWendtime <- strptime(mer_anno$NEWendtime,
+                                      format="%Y-%m-%d %H:%M:%OS")
+      
+      # sbs
+      n <- nrow(mer_anno)
+      l <- lapply(1:n, sbs)
+      sbs_anno <- suppressMessages(Reduce(rbind, l) %>% 
+                                     pad())
+      
+      # changing NA's to transition;gap
+      levels <- levels(sbs_anno$annotation)
+      levels[length(levels) + 1] <- "gap"
+      sbs_anno$annotation <- factor(sbs_anno$annotation,
+                                    levels = levels)
+      sbs_anno$annotation[is.na(sbs_anno$annotation)] <- "gap"
+      
+      # on off times
+      on_off <- on_off_log[on_off_log$id == id & on_off_log$visit == visit, ]
+      on <- strptime(on_off$date_time_on,"%Y-%m-%d %H:%M:%S")
+      off <- strptime(on_off$date_time_off,"%Y-%m-%d %H:%M:%S")
+      
+      #	label off times
+      sbs_anno$off <- 1
+      n <- dim(sbs_anno)[1]
+      index <- (1:n)[(sbs_anno$time >= on) & (sbs_anno$time <= off)]
+      sbs_anno$off[index] <- 0
+      
+      # check#2: see if off times were actually labeled
+      inds_worn <- (1:(dim(sbs_anno)[1]))[sbs_anno$off==0]
+      i <- length(inds_worn)
+      if(i == 0) {
+        
+        warning("\n",
+                "\n",
+                file_name, "timestamp or on_off_log entry incorrect")
+        
+      } else {
+        
+        # Clean - avsa specific
+        vis_anno <- sbs_anno[sbs_anno$off == 0, ] # remove off times
+        vis_anno$time <- as.POSIXct(vis_anno$time, 
+                                    tz = "America/Chicago") #change time to POSIXct class instead of POSIXlt
+        vis_anno$ID <- id # add in ID
+        vis_anno$Visit <- visit # add in Visit number
+        vis_anno$annotation <- as.character(vis_anno$annotation) #change to character for next step
+        vis_anno$annotation[vis_anno$annotation == "posture;0006 sitting"] <- "0" 
+        vis_anno$annotation[vis_anno$annotation == "posture;0007 standing"] <- "1" 
+        vis_anno$annotation[vis_anno$annotation == "posture;0008 movement"] <- "2"
+        vis_anno$annotation[vis_anno$annotation == "gap"] <- "3"
+        vis_anno$annotation[!(vis_anno$annotation %in% c("0", "1", "2", "3"))] <- "4"
+        vis_anno <-vis_anno[, c("ID",
+                                "Visit",
+                                "time",
+                                "annotation")]
+        
+        # write table, difference compared to process_anno
+        write.table(vis_anno,
+                    file = paste0("./3_data/processed/irr_clean_v2/",
+                                  file_name),
+                    sep = ",",
+                    row.names = F)
+        
+      }
+    }
+  }
+}
 
 merge_img_ap <- function(fpa_img_clean,
                          fpa_ap_clean,
@@ -1514,7 +1704,8 @@ merge_img_ap <- function(fpa_img_clean,
     if (any(lgl_ap_present) == FALSE) {
       
       # No corresponding activPAl file.
-      message("\n")
+      message("",
+              appendLF = TRUE)
       warning(
         "IMG File ", fnm_img, ":\n",
         "    No corresponding AP file found.",
@@ -1561,7 +1752,8 @@ merge_img_ap <- function(fpa_img_clean,
     # Check #1
     if (nrw_img != nrw_merged) {
       
-      message("\n")
+      message("",
+              appendLF = TRUE)
       warning(
         study_id_visit, ":\n",
         "    IMG and AP file do not match in time\n",
@@ -1591,10 +1783,12 @@ merge_img_ap <- function(fpa_img_clean,
       path = paste(fpa_merged, 
                    fnm_merged, 
                    sep = "/"),
-      delim = ",")
+      delim = ",",
+      progress = FALSE
+    )
     
-    message("done\n",
-            appendLF = )
+    message("DONE",
+            appendLF = TRUE)
     
   }
   
@@ -1643,6 +1837,12 @@ merge_img_ap <- function(fpa_img_clean,
 
 merge_irr <- function(list_irr) {
   
+  # list_irr <-
+  #   list.files(
+  #     "./3_data/processed/irr_clean",
+  #     pattern = ".csv"
+  #   )
+  
   # list names of visits
   index <- str_sub(list_irr,
                    start = 1,
@@ -1662,15 +1862,17 @@ merge_irr <- function(list_irr) {
     
     message("Calculating IRR for ", id_visit, "...\n")
     
-    for (i in seq_along(list_visit)) {
+    for (k in seq_along(list_visit)) {
       
-      file_name <- list_visit[i]
+      file_name <- list_visit[k]
       
       # read in one visit file
-      irr_img <- suppressMessages(vroom(file = paste("./3_data/processed/irr_clean",
-                                    file_name,
-                                    sep = "/"),
-                       delim = ","))
+      irr_img <- suppressMessages(
+        vroom(file = paste("./3_data/processed/irr_clean",
+                           file_name,
+                           sep = "/"),
+              delim = ",")
+      )
       
       irr_img <- unique(irr_img)
       
@@ -1685,13 +1887,13 @@ merge_irr <- function(list_irr) {
       colnames(irr_img)[4] <- coder
       
       # put anno files in one list
-      if (i == 1) {
+      if (k == 1) {
         
         list_merge <- list(irr_img)
         
-      } else if (i > 1) {
+      } else if (k > 1) {
         
-        list_merge[[i]] <- irr_img
+        list_merge[[k]] <- irr_img
         
       }
     }
@@ -1707,6 +1909,24 @@ merge_irr <- function(list_irr) {
              paste0(og, "3"))
     irr_clean <- irr_merged[, -which(colnames(irr_merged) %in% dup)]
     
+    # Write IRR_merged file.
+    vroom_write(
+      irr_clean,
+      path = paste0("./3_data/analysis/merged_irr/",
+                    id_visit,
+                    ".csv"),
+      delim = ",",
+      progress = FALSE
+    )
+    
+    irr_ICC <- 
+      irr::icc(
+        irr_clean,
+        model = "oneway",
+        type = "consistency",
+        unit = "single"
+      )
+    
     # krippendorff's alpha
     irr_kripp <- kripp.alpha(t(irr_clean),
                              method = "nominal")
@@ -1719,10 +1939,13 @@ merge_irr <- function(list_irr) {
     # make df
     irr_table <- data.frame(id_visit     = id_visit,
                             kripp_full   = irr_kripp$value,
-                            krip_gapless = irr_kripp_gapless$value)
+                            krip_gapless = irr_kripp_gapless$value,
+                            irr_ICC      = irr_ICC$value)
     
     # write table
     if (i == 1) {
+      
+      list_irr_clean <- list(irr_clean)
       
       vroom_write(irr_table,
                   path = "./3_data/analysis/irr_table.csv",
@@ -1731,6 +1954,8 @@ merge_irr <- function(list_irr) {
       
     } else if (i > 1) {
       
+      list_irr_clean[[i]] <- irr_clean
+      
       vroom_write(irr_table,
                   path = "./3_data/analysis/irr_table.csv",
                   delim = ",",
@@ -1738,8 +1963,165 @@ merge_irr <- function(list_irr) {
       
     }
   }
+  
+  irr_clean_all <- bind_rows(list_irr_clean)
+  irr::icc(
+    irr_clean_all,
+    model = "oneway",
+    type = "consistency",
+    unit = "single"
+  )
+  
+  
 }
 
+merge_irr_v2 <- function(list_irr) {
+  
+  # list_irr <-
+  #   list.files(
+  #     "./3_data/processed/irr_clean_v2",
+  #     pattern = ".csv"
+  #   )
+
+  # list names of visits
+  index <- str_sub(list_irr,
+                   start = 1,
+                   end = 11) %>% 
+    unique()
+  
+  for (i in seq_along(index)) {
+    
+    # list files per visit
+    list_visit <- list_irr[str_detect(list_irr,
+                                      index[i])]
+    
+    # get id and visit for table
+    id_visit <- str_sub(list_visit[1],
+                        start = 1,
+                        end = 11)
+    
+    message("Calculating IRR for ", id_visit, "...\n")
+    
+    for (k in seq_along(list_visit)) {
+      
+      file_name <- list_visit[k]
+      
+      # read in one visit file
+      irr_img <- suppressMessages(
+        vroom(file = paste("./3_data/processed/irr_clean_v2",
+                           file_name,
+                           sep = "/"),
+              delim = ",")
+      )
+      
+      irr_img <- unique(irr_img)
+      
+      # get coder name and rename annotation column after it
+      coder <- 
+        file_name %>% 
+        str_extract(pattern = "[^E_]*$") %>% 
+        str_extract(pattern = "[^.]*")
+      
+      colnames(irr_img)[ncol(irr_img)] <- coder
+      
+      # put anno files in one list
+      if (k == 1) {
+        
+        list_merge <- list(irr_img[, ncol(irr_img)])
+        
+      } else if (k > 1) {
+        
+        list_merge[[k]] <- irr_img[, ncol(irr_img)]
+        
+      }
+    }
+    
+    # merge anno's for one visit into one df
+    irr_merged <- bind_cols(list_merge)
+    
+    # # remove id, visit, time
+    # og <- colnames(irr_merged)[1:3]
+    # dup <- c(og,
+    #          paste0(og, "1"),
+    #          paste0(og, "2"),
+    #          paste0(og, "3"))
+    # irr_clean <- irr_merged[, -which(colnames(irr_merged) %in% dup)]
+    irr_clean <- irr_merged
+    
+    # Write IRR_merged file.
+    vroom_write(
+      irr_clean,
+      path = paste0("./3_data/analysis/merged_irr/",
+                    id_visit,
+                    ".csv"),
+      delim = ",",
+      progress = FALSE
+    )
+    
+    irr_ICC <- 
+      irr::icc(
+        irr_clean,
+        model = "oneway",
+        type = "consistency",
+        unit = "single"
+      )
+    
+    # krippendorff's alpha
+    irr_kripp <- kripp.alpha(t(irr_clean),
+                             method = "nominal")
+    
+    # irr_gapless <- irr_clean[irr_clean$Chang != 3 & irr_clean$Miller != 3 & irr_clean$Smith != 3,]
+    
+    # irr_kripp_gapless <- kripp.alpha(t(irr_gapless),
+                                     # method = "nominal")
+    
+    # make df
+    irr_table <- data.frame(id_visit     = id_visit,
+                            kripp_full   = irr_kripp$value,
+                            # krip_gapless = irr_kripp_gapless$value,
+                            irr_ICC      = irr_ICC$value)
+    
+    # write table
+    if (i == 1) {
+      
+      list_irr_clean <- list(irr_clean)
+      
+      vroom_write(irr_table,
+                  path = "./3_data/analysis/irr_table.csv",
+                  delim = ",",
+                  append = F)
+      
+    } else if (i > 1) {
+      
+      list_irr_clean[[i]] <- irr_clean
+      
+      vroom_write(irr_table,
+                  path = "./3_data/analysis/irr_table.csv",
+                  delim = ",",
+                  append = T)
+      
+    }
+  }
+  
+  irr_clean_all <- bind_rows(list_irr_clean)
+  irr::icc(
+    irr_clean_all,
+    model = "oneway",
+    type = "consistency",
+    unit = "single"
+  )
+  
+  # Testout
+    list_irr_clean[[10]] %>%
+      irr::icc(model = "oneway",
+               type = "consistency",
+               unit = "single") # 0.968
+    list_irr_clean[[11]] %>%
+      irr::icc(model = "oneway",
+               type = "consistency",
+               unit = "single")
+  
+}
 
 process_avsa_data <- function(fpa_merged,
                               fpa_processed,
